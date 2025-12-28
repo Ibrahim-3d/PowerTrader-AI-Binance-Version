@@ -271,7 +271,7 @@ class NeuralSignalTile(ttk.Frame):
 # -----------------------------
 
 DEFAULT_SETTINGS = {
-    "main_neural_dir": r"C:\PowerTrader_AI",
+    "main_neural_dir": r"C:\Users\garag\OneDrive\Desktop\neural",
     "coins": ["BTC", "ETH", "XRP", "BNB", "DOGE"],
     "default_timeframe": "1hour",
     "timeframes": [
@@ -4646,14 +4646,26 @@ class PowerTraderHub(tk.Tk):
             pub_box.configure(bg=DARK_PANEL, fg=DARK_FG, insertbackground=DARK_FG)
 
             def _render_public_from_private_b64(priv_b64: str) -> str:
+                """Return Robinhood-compatible Public Key: base64(raw_ed25519_public_key_32_bytes)."""
                 try:
                     raw = base64.b64decode(priv_b64)
-                    pk = ed25519.Ed25519PrivateKey.from_private_bytes(raw)
-                    pub = pk.public_key().public_bytes(
-                        encoding=serialization.Encoding.OpenSSH,
-                        format=serialization.PublicFormat.OpenSSH,
+
+                    # Accept either:
+                    #   - 32 bytes: Ed25519 seed
+                    #   - 64 bytes: NaCl/tweetnacl secretKey (seed + public)
+                    if len(raw) == 64:
+                        seed = raw[:32]
+                    elif len(raw) == 32:
+                        seed = raw
+                    else:
+                        return ""
+
+                    pk = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
+                    pub_raw = pk.public_key().public_bytes(
+                        encoding=serialization.Encoding.Raw,
+                        format=serialization.PublicFormat.Raw,
                     )
-                    return pub.decode("utf-8", errors="ignore")
+                    return base64.b64encode(pub_raw).decode("utf-8")
                 except Exception:
                     return ""
 
@@ -4669,22 +4681,26 @@ class PowerTraderHub(tk.Tk):
                 _set_pub_text(_render_public_from_private_b64(private_b64_state["value"]))
 
             def generate_keys():
-                # Generate an Ed25519 keypair
+                # Generate an Ed25519 keypair (Robinhood expects base64 raw public key bytes)
                 priv = ed25519.Ed25519PrivateKey.generate()
                 pub = priv.public_key()
 
-                pub_bytes = pub.public_bytes(
-                    encoding=serialization.Encoding.OpenSSH,
-                    format=serialization.PublicFormat.OpenSSH,
-                )
-                priv_raw = priv.private_bytes(
+                seed = priv.private_bytes(
                     encoding=serialization.Encoding.Raw,
                     format=serialization.PrivateFormat.Raw,
                     encryption_algorithm=serialization.NoEncryption(),
                 )
+                pub_raw = pub.public_bytes(
+                    encoding=serialization.Encoding.Raw,
+                    format=serialization.PublicFormat.Raw,
+                )
 
-                private_b64_state["value"] = base64.b64encode(priv_raw).decode("utf-8")
-                _set_pub_text(pub_bytes.decode("utf-8", errors="ignore"))
+                # Store private key in a compatible format (64 bytes like tweetnacl secretKey: seed + pub)
+                secret64 = seed + pub_raw
+                private_b64_state["value"] = base64.b64encode(secret64).decode("utf-8")
+
+                # Show what you paste into Robinhood: base64(raw public key)
+                _set_pub_text(base64.b64encode(pub_raw).decode("utf-8"))
 
                 messagebox.showinfo(
                     "Step 1 complete",
@@ -4693,11 +4709,12 @@ class PowerTraderHub(tk.Tk):
                     "  1) Click 'Copy Public Key' in this window\n"
                     "  2) On Robinhood (desktop web): Account → Settings → Crypto\n"
                     "  3) Scroll to 'API Trading' → click '+ Add Key'\n"
-                    "  4) Paste the Public Key into the 'Public key' field\n"
+                    "  4) Paste the Public Key (base64) into the 'Public key' field\n"
                     "  5) Enable permissions READ + TRADE (this trader needs both), then Save\n"
                     "  6) Robinhood shows an API Key (usually starts with 'rh...') — copy it right away\n\n"
                     "Then come back here and paste that API Key into the 'API Key' box."
                 )
+
 
 
             def copy_public_key():
@@ -4759,11 +4776,23 @@ class PowerTraderHub(tk.Tk):
 
                 try:
                     raw = base64.b64decode(priv_b64)
-                    pk = ed25519.Ed25519PrivateKey.from_private_bytes(raw)
+
+                    # Accept either:
+                    #   - 32 bytes: Ed25519 seed
+                    #   - 64 bytes: NaCl/tweetnacl secretKey (seed + public)
+                    if len(raw) == 64:
+                        seed = raw[:32]
+                    elif len(raw) == 32:
+                        seed = raw
+                    else:
+                        raise ValueError(f"Unexpected private key length: {len(raw)} bytes (expected 32 or 64)")
+
+                    pk = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
                     sig_b64 = base64.b64encode(pk.sign(msg)).decode("utf-8")
                 except Exception as e:
                     messagebox.showerror("Bad private key", f"Couldn't use your private key (r_secret.txt).\n\nError:\n{e}")
                     return
+
 
                 headers = {
                     "x-api-key": api_key,
@@ -4995,4 +5024,3 @@ class PowerTraderHub(tk.Tk):
 if __name__ == "__main__":
     app = PowerTraderHub()
     app.mainloop()
-
