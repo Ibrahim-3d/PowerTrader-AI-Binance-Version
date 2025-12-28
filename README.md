@@ -109,6 +109,8 @@ You don’t need to manually start separate programs. The hub handles everything
 - Higher number = stronger signal.
 - LONG = buy-direction signal. SHORT = sell-direction signal.
 
+A TRADE WILL START FOR A COIN IF THAT COIN REACHES A LONG LEVEL OF 3 OR HIGHER WHILE HAVING A SHORT LEVEL OF 0!
+
 ---
 
 ## Adding more coins (later)
