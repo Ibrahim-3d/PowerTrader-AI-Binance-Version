@@ -271,7 +271,7 @@ class NeuralSignalTile(ttk.Frame):
 # -----------------------------
 
 DEFAULT_SETTINGS = {
-    "main_neural_dir": r"C:\Users\garag\OneDrive\Desktop\neural",
+    "main_neural_dir": r"C:\PowerTrader_AI",
     "coins": ["BTC", "ETH", "XRP", "BNB", "DOGE"],
     "default_timeframe": "1hour",
     "timeframes": [
@@ -5050,3 +5050,4 @@ class PowerTraderHub(tk.Tk):
 if __name__ == "__main__":
     app = PowerTraderHub()
     app.mainloop()
+
