@@ -3,6 +3,8 @@ Fully automated crypto trading powered by a custom price prediction AI and a str
 
 # Setup & First-Time Use (Windows)
 
+I would probably stick to < Python 3.12 btw...
+
 THESE INSTRUCTIONS WERE WRITTEN BY AI! PLEASE LET ME KNOW IF THERE ARE ANY ERRORS OR ISSUES WITH THIS SETUP PROCESS!
 
 If you have any crypto holdings in Robinhood currently, either transfer them out of your Robinhood account or sell them to dollars BEFORE going through this setup process!
