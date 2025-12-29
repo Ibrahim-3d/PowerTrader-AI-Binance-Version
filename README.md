@@ -1,6 +1,8 @@
 # PowerTrader_AI
 Fully automated crypto trading powered by a custom price prediction AI and a structured/tiered DCA system.
 
+“It’s an instance-based (kNN/kernel-style) predictor with online per-instance reliability weighting, used as a multi-timeframe trading signal.” - ChatGPT on the type of AI used in this trading bot.
+
 # Setup & First-Time Use (Windows)
 
 I would probably stick to < Python 3.12 btw...
