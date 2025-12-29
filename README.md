@@ -104,7 +104,7 @@ When training is done, click:
 1. **Start All**
 
 The Hub will:  
-**start pt_thinker.py**, wait until it is ready, then it will **start trader.py**.  
+**start pt_thinker.py**, wait until it is ready, then it will **start pt_trader.py**.  
 You don’t need to manually start separate programs. The hub handles everything!
 
 ---
