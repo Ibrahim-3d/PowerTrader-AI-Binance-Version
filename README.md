@@ -24,8 +24,6 @@ For determining when to sell, the bot uses a trailing profit margin to maximize 
 
 # Setup & First-Time Use (Windows)
 
-I would probably stick to < Python 3.12 btw...
-
 THESE INSTRUCTIONS WERE WRITTEN BY AI! PLEASE LET ME KNOW IF THERE ARE ANY ERRORS OR ISSUES WITH THIS SETUP PROCESS!
 
 If you have any crypto holdings in Robinhood currently, either transfer them out of your Robinhood account or sell them to dollars BEFORE going through this setup process!
@@ -50,8 +48,10 @@ Keep your API keys private. We are not giving financial advice. We are not respo
 
 ## Step 2 — Download PowerTrader AI
 
-1. On the PowerTrader AI GitHub page, click **Code** → **Download ZIP**.
-2. Extract the ZIP somewhere simple, like: `C:\PowerTraderAI\`
+1. Do not download the zip file of the repo! There is an issue I have to fix.
+2. Create a folder on your computer, like: `C:\PowerTraderAI\`
+3. On the PowerTrader_AI repo page, right click pt_hub.py and click "Save Link As..." and save it into the folder you just created.
+4. Repeat that for all files in the repo (except the readme and the license).
 
 ---
 
@@ -65,6 +65,10 @@ Keep your API keys private. We are not giving financial advice. We are not respo
 3. Install everything PowerTrader AI needs:
 
    `python -m pip install -r requirements.txt`
+
+4. If using Python 3.12 or higher, run this command:
+
+   `python -m pip install setuptools`
 
 ---
 
