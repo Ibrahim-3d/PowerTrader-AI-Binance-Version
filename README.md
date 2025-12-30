@@ -62,13 +62,13 @@ Keep your API keys private. We are not giving financial advice. We are not respo
 
    `cd C:\PowerTraderAI`
 
-3. Install everything PowerTrader AI needs:
-
-   `python -m pip install -r requirements.txt`
-
-4. If using Python 3.12 or higher, run this command:
+3. If using Python 3.12 or higher, run this command:
 
    `python -m pip install setuptools`
+
+4. Install everything PowerTrader AI needs:
+
+   `python -m pip install -r requirements.txt`
 
 ---
 
