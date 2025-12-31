@@ -1185,9 +1185,15 @@ class CryptoAPITrading:
                     state = {"active": False, "line": base_pm_line, "peak": 0.0, "was_above": False}
                     self.trailing_pm[symbol] = state
                 else:
-                    # Never let the line be below the (possibly updated) base PM start line
-                    if state.get("line", 0.0) < base_pm_line:
+                    # IMPORTANT:
+                    # If trailing hasn't activated yet, this is just the PM line.
+                    # It MUST track the current avg_cost_basis (so it can move DOWN after each DCA).
+                    if not state.get("active", False):
                         state["line"] = base_pm_line
+                    else:
+                        # Once trailing is active, the line should never be below the base PM start line.
+                        if state.get("line", 0.0) < base_pm_line:
+                            state["line"] = base_pm_line
 
                 # Use SELL price because that's what you actually get when you market sell
                 above_now = current_sell_price >= state["line"]
@@ -1226,7 +1232,6 @@ class CryptoAPITrading:
                             tag="TRAIL_SELL",
                         )
 
-
                         trades_made = True
                         self.trailing_pm.pop(symbol, None)  # clear per-coin trailing state on exit
 
@@ -1240,6 +1245,7 @@ class CryptoAPITrading:
 
                 # Save this tick’s position relative to the line (needed for “above -> below” detection)
                 state["was_above"] = above_now
+
 
             # DCA (NEURAL or hardcoded %, whichever hits first for the current stage)
             # Trade starts at neural level 3 => trader is at stage 0.
@@ -1308,10 +1314,15 @@ class CryptoAPITrading:
                         # Only record a DCA buy timestamp on success (so skips never advance anything)
                         self._note_dca_buy(symbol)
 
+                        # DCA changes avg_cost_basis, so the PM line must be rebuilt from the new basis
+                        # (this will re-init to 5% if DCA=0, or 2.5% if DCA>=1)
+                        self.trailing_pm.pop(symbol, None)
+
                         trades_made = True
                         print(f"  Successfully placed DCA buy order for {symbol}.")
                     else:
                         print(f"  Failed to place DCA buy order for {symbol}.")
+
                 else:
                     print(f"  Skipping DCA for {symbol}. Not enough funds.")
 
