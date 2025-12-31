@@ -386,7 +386,51 @@ class CryptoAPITrading:
         except Exception:
             return 0
 
+    @staticmethod
+    def _read_long_price_levels(symbol: str) -> list:
+        """
+        Reads low_bound_prices.html from the per-coin folder and returns a list of LONG (blue) price levels.
 
+        Returned ordering is highest->lowest so:
+          N1 = 1st blue line (top)
+          ...
+          N7 = 7th blue line (bottom)
+        """
+        sym = str(symbol).upper().strip()
+        folder = base_paths.get(sym, main_dir if sym == "BTC" else os.path.join(main_dir, sym))
+        path = os.path.join(folder, "low_bound_prices.html")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = (f.read() or "").strip()
+            if not raw:
+                return []
+
+            # Normalize common formats: python-list, comma-separated, newline-separated
+            raw = raw.strip().strip("[]()")
+            raw = raw.replace(",", " ").replace(";", " ").replace("|", " ")
+            raw = raw.replace("\n", " ").replace("\t", " ")
+            parts = [p for p in raw.split() if p]
+
+            vals = []
+            for p in parts:
+                try:
+                    vals.append(float(p))
+                except Exception:
+                    continue
+
+            # De-dupe, then sort high->low for stable N1..N7 mapping
+            out = []
+            seen = set()
+            for v in vals:
+                k = round(float(v), 12)
+                if k in seen:
+                    continue
+                seen.add(k)
+                out.append(float(v))
+            out.sort(reverse=True)
+            return out
+        except Exception:
+            return []
 
 
 
@@ -1003,9 +1047,9 @@ class CryptoAPITrading:
             else:
                 next_dca_display = f"{hard_next:.2f}%"
 
-            # --- DCA DISPLAY LINE (pick whichever trigger line is higher: NEURAL vs HARD) ---
+            # --- DCA DISPLAY LINE (show whichever trigger will be hit first: higher of NEURAL line vs HARD line) ---
             # Hardcoded gives an actual price line: cost_basis * (1 + hard_next%).
-            # Neural is level-based; for display we treat it as "higher" only once its condition is already met.
+            # Neural gives an actual price line from low_bound_prices.html (N4..N7 = 4th..7th blue line).
             dca_line_source = "HARD"
             dca_line_price = 0.0
             dca_line_pct = 0.0
@@ -1013,24 +1057,27 @@ class CryptoAPITrading:
             if avg_cost_basis > 0:
                 # Hardcoded trigger line price
                 hard_line_price = avg_cost_basis * (1.0 + (hard_next / 100.0))
+
+                # Default to hardcoded unless neural line is higher (hit first)
                 dca_line_price = hard_line_price
 
-                # If neural is already satisfied for this stage, then neural is effectively the "higher/earlier" trigger.
-                # For display purposes, treat that as an immediate line at current price (i.e., DCA is ready NOW).
                 if next_stage < 4:
-                    neural_level_needed_disp = next_stage + 4
-                    neural_level_now_disp = self._read_long_dca_signal(symbol)
+                    neural_level_needed_disp = next_stage + 4  # stage 0->N4, 1->N5, 2->N6, 3->N7
+                    neural_levels = self._read_long_price_levels(symbol)  # highest->lowest == N1..N7
 
-                    neural_ready_now = (gain_loss_percentage_buy < 0) and (neural_level_now_disp >= neural_level_needed_disp)
-                    if neural_ready_now:
-                        neural_line_price = current_buy_price
-                        if neural_line_price > dca_line_price:
-                            dca_line_price = neural_line_price
-                            dca_line_source = f"NEURAL N{neural_level_needed_disp}"
+                    neural_line_price = 0.0
+                    if len(neural_levels) >= neural_level_needed_disp:
+                        neural_line_price = float(neural_levels[neural_level_needed_disp - 1])
+
+                    # Whichever is higher will be hit first as price drops
+                    if neural_line_price > dca_line_price:
+                        dca_line_price = neural_line_price
+                        dca_line_source = f"NEURAL N{neural_level_needed_disp}"
 
                 # PnL% shown alongside DCA is the normal buy-side PnL%
                 # (same calculation as GUI "Buy Price PnL": current buy/ask vs avg cost basis)
                 dca_line_pct = gain_loss_percentage_buy
+
 
 
 
