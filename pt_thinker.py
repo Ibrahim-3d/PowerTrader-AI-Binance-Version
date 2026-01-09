@@ -736,8 +736,8 @@ def step_coin(sym: str):
 			try:
 				current = robinhood_current_ask(rh_symbol)
 				break
-			except Exception:
-				time.sleep(1)
+			except Exception as e:
+				print(e)
 				continue
 
 		# IMPORTANT: messages printed below use the bounds currently in state.
