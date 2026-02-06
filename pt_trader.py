@@ -1,18 +1,27 @@
-import base64
 import datetime
 import json
 import uuid
 import time
 import math
+from decimal import Decimal, ROUND_DOWN
 from typing import Any, Dict, Optional
 import requests
-from nacl.signing import SigningKey
+from binance.client import Client as BinanceClient
+from binance.exceptions import BinanceAPIException, BinanceOrderException
 import os
 import colorama
 from colorama import Fore, Style
 import traceback
-from cryptography.hazmat.primitives.asymmetric import ed25519
-from cryptography.hazmat.primitives import serialization
+
+
+def _to_binance_symbol(base_coin: str) -> str:
+    """Convert a base coin like 'BTC' to Binance symbol 'BTCUSDT'."""
+    return f"{base_coin.upper().strip()}USDT"
+
+
+def _from_binance_symbol(symbol: str) -> str:
+    """Convert a Binance symbol like 'BTCUSDT' to base coin 'BTC'."""
+    return symbol.upper().strip().removesuffix("USDT")
 
 # -----------------------------
 # GUI HUB OUTPUTS
@@ -321,24 +330,24 @@ def _refresh_paths_and_symbols():
 
 
 #API STUFF
-API_KEY = ""
-BASE64_PRIVATE_KEY = ""
+BINANCE_API_KEY = ""
+BINANCE_SECRET_KEY = ""
 
 try:
-    with open('r_key.txt', 'r', encoding='utf-8') as f:
-        API_KEY = (f.read() or "").strip()
-    with open('r_secret.txt', 'r', encoding='utf-8') as f:
-        BASE64_PRIVATE_KEY = (f.read() or "").strip()
+    with open('b_key.txt', 'r', encoding='utf-8') as f:
+        BINANCE_API_KEY = (f.read() or "").strip()
+    with open('b_secret.txt', 'r', encoding='utf-8') as f:
+        BINANCE_SECRET_KEY = (f.read() or "").strip()
 except Exception:
-    API_KEY = ""
-    BASE64_PRIVATE_KEY = ""
+    BINANCE_API_KEY = ""
+    BINANCE_SECRET_KEY = ""
 
-if not API_KEY or not BASE64_PRIVATE_KEY:
+if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
     print(
-        "\n[PowerTrader] Robinhood API credentials not found.\n"
-        "Open the GUI and go to Settings → Robinhood API → Setup / Update.\n"
-        "That wizard will generate your keypair, tell you where to paste the public key on Robinhood,\n"
-        "and will save r_key.txt + r_secret.txt so this trader can authenticate.\n"
+        "\n[PowerTrader] Binance API credentials not found.\n"
+        "Open the GUI and go to Settings → Binance API → Setup Wizard.\n"
+        "That wizard will let you enter your API Key + Secret Key from Binance,\n"
+        "and will save b_key.txt + b_secret.txt so this trader can authenticate.\n"
     )
     raise SystemExit(1)
 
@@ -347,10 +356,8 @@ class CryptoAPITrading:
         # keep a copy of the folder map (same idea as trader.py)
         self.path_map = dict(base_paths)
 
-        self.api_key = API_KEY
-        private_key_seed = base64.b64decode(BASE64_PRIVATE_KEY)
-        self.private_key = SigningKey(private_key_seed)
-        self.base_url = "https://trading.robinhood.com"
+        self.client = BinanceClient(BINANCE_API_KEY, BINANCE_SECRET_KEY)
+        self._exchange_info_cache = {}  # LOT_SIZE cache per symbol
 
         self.dca_levels_triggered = {}  # Track DCA levels for each crypto
         self.dca_levels = list(DCA_LEVELS)  # Hard DCA triggers (percent PnL)
@@ -484,14 +491,8 @@ class CryptoAPITrading:
 
     def _get_order_by_id(self, symbol: str, order_id: str) -> Optional[dict]:
         try:
-            orders = self.get_orders(symbol)
-            results = orders.get("results", []) if isinstance(orders, dict) else []
-            for o in results:
-                try:
-                    if o.get("id") == order_id:
-                        return o
-                except Exception:
-                    continue
+            raw = self.client.get_order(symbol=symbol, orderId=int(order_id))
+            return self._adapt_binance_order(raw)
         except Exception:
             pass
         return None
@@ -542,8 +543,8 @@ class CryptoAPITrading:
             return 0.0, None
 
     def _wait_for_order_terminal(self, symbol: str, order_id: str) -> Optional[dict]:
-        """Blocks until order is filled/canceled/rejected, then returns the order dict."""
-        terminal = {"filled", "canceled", "cancelled", "rejected", "failed", "error"}
+        """Blocks until order is filled/canceled/rejected/expired, then returns the order dict."""
+        terminal = {"filled", "canceled", "cancelled", "rejected", "failed", "error", "expired"}
         while True:
             o = self._get_order_by_id(symbol, order_id)
             if not o:
@@ -557,7 +558,7 @@ class CryptoAPITrading:
     def _reconcile_pending_orders(self) -> None:
         """
         If the hub/trader restarts mid-order, we keep the pre-order buying_power on disk and
-        finish the accounting once the order shows as terminal in Robinhood.
+        finish the accounting once the order shows as terminal in Binance.
         """
         try:
             pending = self._pnl_ledger.get("pending_orders", {})
@@ -660,7 +661,7 @@ class CryptoAPITrading:
         ts = time.time()
 
         side_l = str(side or "").lower().strip()
-        base = str(symbol or "").upper().split("-")[0].strip()
+        base = _from_binance_symbol(str(symbol or "").upper().strip())
 
         # Ensure ledger keys exist (back-compat)
         try:
@@ -779,9 +780,33 @@ class CryptoAPITrading:
     def _write_trader_status(self, status: dict) -> None:
         self._atomic_write_json(TRADER_STATUS_PATH, status)
 
+    def _get_lot_size(self, symbol: str) -> dict:
+        """Query and cache LOT_SIZE filter for a Binance symbol (stepSize, minQty)."""
+        symbol = symbol.upper().strip()
+        if symbol in self._exchange_info_cache:
+            return self._exchange_info_cache[symbol]
+
+        info = self.client.get_symbol_info(symbol)
+        lot_size = {}
+        if info and "filters" in info:
+            for f in info["filters"]:
+                if f.get("filterType") == "LOT_SIZE":
+                    lot_size = {
+                        "stepSize": f.get("stepSize", "0.00000001"),
+                        "minQty": f.get("minQty", "0.00000001"),
+                    }
+                    break
+        if not lot_size:
+            lot_size = {"stepSize": "0.00000001", "minQty": "0.00000001"}
+        self._exchange_info_cache[symbol] = lot_size
+        return lot_size
+
     @staticmethod
-    def _get_current_timestamp() -> int:
-        return int(datetime.datetime.now(tz=datetime.timezone.utc).timestamp())
+    def _round_step_size(quantity: float, step_size: str) -> float:
+        """Round DOWN quantity to valid step size using Decimal for precision."""
+        d_qty = Decimal(str(quantity))
+        d_step = Decimal(step_size)
+        return float((d_qty // d_step) * d_step)
 
     @staticmethod
     def _fmt_price(price: float) -> str:
@@ -925,9 +950,9 @@ class CryptoAPITrading:
         for holding in holdings.get("results", []):
             symbol = holding["asset_code"]
 
-            full_symbol = f"{symbol}-USD"
+            full_symbol = _to_binance_symbol(symbol)
             orders = self.get_orders(full_symbol)
-            
+
             if not orders or "results" not in orders:
                 print(f"No orders found for {full_symbol}. Skipping.")
                 continue
@@ -1029,7 +1054,7 @@ class CryptoAPITrading:
                     side = str(obj.get("side", "")).lower()
                     tag = obj.get("tag", None)
                     sym_full = str(obj.get("symbol", "")).upper().strip()
-                    base = sym_full.split("-")[0].strip() if sym_full else ""
+                    base = _from_binance_symbol(sym_full) if sym_full else ""
                     if not base:
                         continue
 
@@ -1094,66 +1119,97 @@ class CryptoAPITrading:
         self._dca_buy_ts[base] = []
 
 
-    def make_api_request(self, method: str, path: str, body: Optional[str] = "") -> Any:
+    @staticmethod
+    def _adapt_binance_order(raw: dict) -> dict:
+        """Adapt a raw Binance order dict into the shape the rest of the code expects."""
+        if not raw or not isinstance(raw, dict):
+            return raw
+        status = str(raw.get("status", "")).upper()
+        state_map = {
+            "NEW": "pending", "PARTIALLY_FILLED": "pending",
+            "FILLED": "filled", "CANCELED": "canceled",
+            "REJECTED": "rejected", "EXPIRED": "expired",
+            "EXPIRED_IN_MATCH": "expired",
+        }
+        state = state_map.get(status, status.lower())
 
-        timestamp = self._get_current_timestamp()
-        headers = self.get_authorization_header(method, path, body, timestamp)
-        url = self.base_url + path
+        exec_qty = float(raw.get("executedQty", 0.0) or 0.0)
+        cum_quote = float(raw.get("cummulativeQuoteQty", 0.0) or 0.0)
+        avg_price = (cum_quote / exec_qty) if exec_qty > 0 else 0.0
 
-        try:
-            if method == "GET":
-                response = requests.get(url, headers=headers, timeout=10)
-            elif method == "POST":
-                response = requests.post(url, headers=headers, json=json.loads(body), timeout=10)
-
-            response.raise_for_status()
-            return response.json()
-        except requests.HTTPError as http_err:
-            try:
-                # Parse and return the JSON error response
-                error_response = response.json()
-                return error_response  # Return the JSON error for further handling
-            except Exception:
-                return None
-        except Exception:
-            return None
-
-    def get_authorization_header(
-            self, method: str, path: str, body: str, timestamp: int
-    ) -> Dict[str, str]:
-        message_to_sign = f"{self.api_key}{timestamp}{path}{method}{body}"
-        signed = self.private_key.sign(message_to_sign.encode("utf-8"))
+        executions = []
+        if exec_qty > 0 and avg_price > 0:
+            executions.append({
+                "quantity": exec_qty,
+                "effective_price": avg_price,
+            })
 
         return {
-            "x-api-key": self.api_key,
-            "x-signature": base64.b64encode(signed.signature).decode("utf-8"),
-            "x-timestamp": str(timestamp),
+            "id": str(raw.get("orderId", "")),
+            "state": state,
+            "side": str(raw.get("side", "")).lower(),
+            "symbol": raw.get("symbol", ""),
+            "average_price": avg_price,
+            "filled_asset_quantity": exec_qty,
+            "asset_quantity": float(raw.get("origQty", 0.0) or 0.0),
+            "executions": executions,
+            "created_at": str(raw.get("time", raw.get("transactTime", ""))),
         }
 
     def get_account(self) -> Any:
-        path = "/api/v1/crypto/trading/accounts/"
-        return self.make_api_request("GET", path)
+        """Returns dict with 'buying_power' (USDT free balance)."""
+        try:
+            acct = self.client.get_account()
+            usdt_free = 0.0
+            for bal in acct.get("balances", []):
+                if bal.get("asset") == "USDT":
+                    usdt_free = float(bal.get("free", 0.0) or 0.0)
+                    break
+            return {"buying_power": usdt_free}
+        except Exception:
+            return {"buying_power": 0.0}
 
     def get_holdings(self) -> Any:
-        path = "/api/v1/crypto/trading/holdings/"
-        return self.make_api_request("GET", path)
+        """Returns dict with 'results' list of {asset_code, total_quantity}."""
+        try:
+            acct = self.client.get_account()
+            results = []
+            for bal in acct.get("balances", []):
+                asset = bal.get("asset", "")
+                if asset == "USDT" or asset == "USDC":
+                    continue
+                free = float(bal.get("free", 0.0) or 0.0)
+                locked = float(bal.get("locked", 0.0) or 0.0)
+                total = free + locked
+                if total > 0.0:
+                    results.append({
+                        "asset_code": asset,
+                        "total_quantity": total,
+                    })
+            return {"results": results}
+        except Exception:
+            return {"results": []}
 
     def get_trading_pairs(self) -> Any:
-        path = "/api/v1/crypto/trading/trading_pairs/"
-        response = self.make_api_request("GET", path)
-
-        if not response or "results" not in response:
+        """Returns list of active USDT trading pairs."""
+        try:
+            info = self.client.get_exchange_info()
+            pairs = []
+            for s in info.get("symbols", []):
+                if s.get("status") == "TRADING" and s.get("quoteAsset") == "USDT":
+                    pairs.append(s)
+            return pairs
+        except Exception:
             return []
-
-        trading_pairs = response.get("results", [])
-        if not trading_pairs:
-            return []
-
-        return trading_pairs
 
     def get_orders(self, symbol: str) -> Any:
-        path = f"/api/v1/crypto/trading/orders/?symbol={symbol}"
-        return self.make_api_request("GET", path)
+        """Returns dict with 'results' list of adapted order dicts."""
+        try:
+            raw_orders = self.client.get_all_orders(symbol=symbol)
+            results = [self._adapt_binance_order(o) for o in raw_orders]
+            return {"results": results}
+        except Exception:
+            return {"results": []}
 
     def calculate_cost_basis(self):
         holdings = self.get_holdings()
@@ -1169,7 +1225,7 @@ class CryptoAPITrading:
         cost_basis = {}
 
         for asset_code in active_assets:
-            orders = self.get_orders(f"{asset_code}-USD")
+            orders = self.get_orders(_to_binance_symbol(asset_code))
             if not orders or "results" not in orders:
                 continue
 
@@ -1215,27 +1271,27 @@ class CryptoAPITrading:
         valid_symbols = []
 
         for symbol in symbols:
-            if symbol == "USDC-USD":
+            if symbol == "USDCUSDT":
                 continue
 
-            path = f"/api/v1/crypto/marketdata/best_bid_ask/?symbol={symbol}"
-            response = self.make_api_request("GET", path)
+            try:
+                ticker = self.client.get_orderbook_ticker(symbol=symbol)
+                ask = float(ticker.get("askPrice", 0.0) or 0.0)
+                bid = float(ticker.get("bidPrice", 0.0) or 0.0)
 
-            if response and "results" in response:
-                result = response["results"][0]
-                ask = float(result["ask_inclusive_of_buy_spread"])
-                bid = float(result["bid_inclusive_of_sell_spread"])
+                if ask > 0.0 and bid > 0.0:
+                    buy_prices[symbol] = ask
+                    sell_prices[symbol] = bid
+                    valid_symbols.append(symbol)
 
-                buy_prices[symbol] = ask
-                sell_prices[symbol] = bid
-                valid_symbols.append(symbol)
-
-                # Update cache for transient failures later
-                try:
-                    self._last_good_bid_ask[symbol] = {"ask": ask, "bid": bid, "ts": time.time()}
-                except Exception:
-                    pass
-            else:
+                    # Update cache for transient failures later
+                    try:
+                        self._last_good_bid_ask[symbol] = {"ask": ask, "bid": bid, "ts": time.time()}
+                    except Exception:
+                        pass
+                else:
+                    raise ValueError("zero price")
+            except Exception:
                 # Fallback to cached bid/ask so account value never drops due to a transient miss
                 cached = None
                 try:
@@ -1270,112 +1326,94 @@ class CryptoAPITrading:
         current_price = current_buy_prices[symbol]
         asset_quantity = amount_in_usd / current_price
 
-        max_retries = 5
-        retries = 0
+        # Pre-calculate precision via LOT_SIZE (replaces Robinhood's retry-on-precision-error loop)
+        try:
+            lot = self._get_lot_size(symbol)
+            asset_quantity = self._round_step_size(asset_quantity, lot["stepSize"])
+            min_qty = float(lot.get("minQty", 0.0) or 0.0)
+            if asset_quantity < min_qty:
+                print(f"  Buy quantity {asset_quantity} is below minQty {min_qty} for {symbol}. Skipping.")
+                return None
+        except Exception:
+            asset_quantity = round(asset_quantity, 8)
 
-        while retries < max_retries:
-            retries += 1
-            response = None
+        response = None
+        try:
+            # --- exact profit tracking snapshot (BEFORE placing order) ---
+            buying_power_before = self._get_buying_power()
+
+            raw = self.client.order_market_buy(
+                symbol=symbol,
+                quantity=f"{asset_quantity}",
+                newClientOrderId=client_order_id,
+            )
+            response = self._adapt_binance_order(raw)
+            order_id = response.get("id", None)
+
+            # Persist the pre-order buying power so restarts can reconcile precisely
             try:
-                # Default precision to 8 decimals initially
-                rounded_quantity = round(asset_quantity, 8)
-
-                body = {
-                    "client_order_id": client_order_id,
-                    "side": side,
-                    "type": order_type,
-                    "symbol": symbol,
-                    "market_order_config": {
-                        "asset_quantity": f"{rounded_quantity:.8f}"  # Start with 8 decimal places
+                if order_id:
+                    self._pnl_ledger.setdefault("pending_orders", {})
+                    self._pnl_ledger["pending_orders"][order_id] = {
+                        "symbol": symbol,
+                        "side": "buy",
+                        "buying_power_before": float(buying_power_before),
+                        "avg_cost_basis": float(avg_cost_basis) if avg_cost_basis is not None else None,
+                        "pnl_pct": float(pnl_pct) if pnl_pct is not None else None,
+                        "tag": tag,
+                        "created_ts": time.time(),
                     }
-                }
+                    self._save_pnl_ledger()
+            except Exception:
+                pass
 
-                path = "/api/v1/crypto/trading/orders/"
-
-                # --- exact profit tracking snapshot (BEFORE placing order) ---
-                buying_power_before = self._get_buying_power()
-
-                response = self.make_api_request("POST", path, json.dumps(body))
-                if response and "errors" not in response:
-                    order_id = response.get("id", None)
-
-                    # Persist the pre-order buying power so restarts can reconcile precisely
+            # Wait until the order is actually complete in the system, then use order history executions
+            if order_id:
+                order = self._wait_for_order_terminal(symbol, order_id)
+                state = str(order.get("state", "")).lower().strip() if isinstance(order, dict) else ""
+                if state != "filled":
+                    # Not filled -> clear pending and do not record a trade
                     try:
-                        if order_id:
-                            self._pnl_ledger.setdefault("pending_orders", {})
-                            self._pnl_ledger["pending_orders"][order_id] = {
-                                "symbol": symbol,
-                                "side": "buy",
-                                "buying_power_before": float(buying_power_before),
-                                "avg_cost_basis": float(avg_cost_basis) if avg_cost_basis is not None else None,
-                                "pnl_pct": float(pnl_pct) if pnl_pct is not None else None,
-                                "tag": tag,
-                                "created_ts": time.time(),
-                            }
-                            self._save_pnl_ledger()
+                        self._pnl_ledger.get("pending_orders", {}).pop(order_id, None)
+                        self._save_pnl_ledger()
                     except Exception:
                         pass
+                    return None
 
-                    # Wait until the order is actually complete in the system, then use order history executions
-                    if order_id:
-                        order = self._wait_for_order_terminal(symbol, order_id)
-                        state = str(order.get("state", "")).lower().strip() if isinstance(order, dict) else ""
-                        if state != "filled":
-                            # Not filled -> clear pending and do not record a trade
-                            try:
-                                self._pnl_ledger.get("pending_orders", {}).pop(order_id, None)
-                                self._save_pnl_ledger()
-                            except Exception:
-                                pass
-                            return None
+                filled_qty, avg_fill_price = self._extract_fill_from_order(order)
 
-                        filled_qty, avg_fill_price = self._extract_fill_from_order(order)
+                buying_power_after = self._get_buying_power()
+                buying_power_delta = float(buying_power_after) - float(buying_power_before)
 
-                        buying_power_after = self._get_buying_power()
-                        buying_power_delta = float(buying_power_after) - float(buying_power_before)
+                # Record for GUI history (ACTUAL fill from order history)
+                self._record_trade(
+                    side="buy",
+                    symbol=symbol,
+                    qty=float(filled_qty),
+                    price=float(avg_fill_price) if avg_fill_price is not None else None,
+                    avg_cost_basis=float(avg_cost_basis) if avg_cost_basis is not None else None,
+                    pnl_pct=float(pnl_pct) if pnl_pct is not None else None,
+                    tag=tag,
+                    order_id=order_id,
+                    buying_power_before=buying_power_before,
+                    buying_power_after=buying_power_after,
+                    buying_power_delta=buying_power_delta,
+                )
 
-                        # Record for GUI history (ACTUAL fill from order history)
-                        self._record_trade(
-                            side="buy",
-                            symbol=symbol,
-                            qty=float(filled_qty),
-                            price=float(avg_fill_price) if avg_fill_price is not None else None,
-                            avg_cost_basis=float(avg_cost_basis) if avg_cost_basis is not None else None,
-                            pnl_pct=float(pnl_pct) if pnl_pct is not None else None,
-                            tag=tag,
-                            order_id=order_id,
-                            buying_power_before=buying_power_before,
-                            buying_power_after=buying_power_after,
-                            buying_power_delta=buying_power_delta,
-                        )
+                # Clear pending now that it is recorded
+                try:
+                    self._pnl_ledger.get("pending_orders", {}).pop(order_id, None)
+                    self._save_pnl_ledger()
+                except Exception:
+                    pass
 
-                        # Clear pending now that it is recorded
-                        try:
-                            self._pnl_ledger.get("pending_orders", {}).pop(order_id, None)
-                            self._save_pnl_ledger()
-                        except Exception:
-                            pass
+            return response  # Successfully placed (and fully filled) order
 
-                    return response  # Successfully placed (and fully filled) order
-
-            except Exception:
-                pass #print(traceback.format_exc())
-
-            # Check for precision errors
-            if response and "errors" in response:
-                for error in response["errors"]:
-                    if "has too much precision" in error.get("detail", ""):
-                        # Extract required precision directly from the error message
-                        detail = error["detail"]
-                        nearest_value = detail.split("nearest ")[1].split(" ")[0]
-
-                        decimal_places = len(nearest_value.split(".")[1].rstrip("0"))
-                        asset_quantity = round(asset_quantity, decimal_places)
-                        break
-                    elif "must be greater than or equal to" in error.get("detail", ""):
-                        return None
-
-        return None
+        except (BinanceAPIException, BinanceOrderException) as e:
+            print(f"  Binance buy order error: {e}")
+            return None
+        except Exception:
+            return None
 
 
 
@@ -1391,24 +1429,35 @@ class CryptoAPITrading:
         pnl_pct: Optional[float] = None,
         tag: Optional[str] = None,
     ) -> Any:
-        body = {
-            "client_order_id": client_order_id,
-            "side": side,
-            "type": order_type,
-            "symbol": symbol,
-            "market_order_config": {
-                "asset_quantity": f"{asset_quantity:.8f}"
-            }
-        }
-
-        path = "/api/v1/crypto/trading/orders/"
+        # Pre-calculate precision via LOT_SIZE
+        try:
+            lot = self._get_lot_size(symbol)
+            asset_quantity = self._round_step_size(asset_quantity, lot["stepSize"])
+            min_qty = float(lot.get("minQty", 0.0) or 0.0)
+            if asset_quantity < min_qty:
+                print(f"  Sell quantity {asset_quantity} is below minQty {min_qty} for {symbol}. Skipping.")
+                return None
+        except Exception:
+            asset_quantity = round(asset_quantity, 8)
 
         # --- exact profit tracking snapshot (BEFORE placing order) ---
         buying_power_before = self._get_buying_power()
 
-        response = self.make_api_request("POST", path, json.dumps(body))
+        response = None
+        try:
+            raw = self.client.order_market_sell(
+                symbol=symbol,
+                quantity=f"{asset_quantity}",
+                newClientOrderId=client_order_id,
+            )
+            response = self._adapt_binance_order(raw)
+        except (BinanceAPIException, BinanceOrderException) as e:
+            print(f"  Binance sell order error: {e}")
+            return None
+        except Exception:
+            return None
 
-        if response and isinstance(response, dict) and "errors" not in response:
+        if response and isinstance(response, dict):
             order_id = response.get("id", None)
 
             # Persist the pre-order buying power so restarts can reconcile precisely
@@ -1433,26 +1482,6 @@ class CryptoAPITrading:
             actual_qty = float(asset_quantity)
             fees_usd = None
 
-            def _fee_to_float(v: Any) -> float:
-                try:
-                    if v is None:
-                        return 0.0
-                    if isinstance(v, (int, float)):
-                        return float(v)
-                    if isinstance(v, str):
-                        return float(v)
-                    if isinstance(v, dict):
-                        # common shapes: {"amount": "0.12"}, {"value": 0.12}, etc.
-                        for k in ("amount", "value", "usd_amount", "fee", "quantity"):
-                            if k in v:
-                                try:
-                                    return float(v[k])
-                                except Exception:
-                                    continue
-                    return 0.0
-                except Exception:
-                    return 0.0
-
             try:
                 if order_id:
                     match = self._wait_for_order_terminal(symbol, order_id)
@@ -1468,38 +1497,13 @@ class CryptoAPITrading:
                             pass
                         return response
 
-                    execs = match.get("executions", []) or []
-                    total_qty = 0.0
-                    total_notional = 0.0
-                    fee_total = 0.0
-
-                    for ex in execs:
-                        try:
-                            q = float(ex.get("quantity", 0.0) or 0.0)
-                            p = float(ex.get("effective_price", 0.0) or 0.0)
-                            total_qty += q
-                            total_notional += (q * p)
-
-                            # Fees can show up under different keys; handle the common ones.
-                            for fk in ("fee", "fees", "fee_amount", "fee_usd", "fee_in_usd"):
-                                if fk in ex:
-                                    fee_total += _fee_to_float(ex.get(fk))
-                        except Exception:
-                            continue
-
-                    # Some payloads include order-level fee fields too
-                    for fk in ("fee", "fees", "fee_amount", "fee_usd", "fee_in_usd"):
-                        if fk in match:
-                            fee_total += _fee_to_float(match.get(fk))
-
-                    if total_qty > 0.0 and total_notional > 0.0:
-                        actual_qty = total_qty
-                        actual_price = total_notional / total_qty
-
-                    fees_usd = float(fee_total) if fee_total else 0.0
+                    filled_qty, avg_fill_price = self._extract_fill_from_order(match)
+                    if filled_qty > 0.0 and avg_fill_price is not None and avg_fill_price > 0.0:
+                        actual_qty = filled_qty
+                        actual_price = avg_fill_price
 
             except Exception:
-                pass #print(traceback.format_exc())
+                pass
 
             # If we managed to get a better fill price, update the displayed PnL% too
             if avg_cost_basis is not None and actual_price is not None:
@@ -1590,11 +1594,11 @@ class CryptoAPITrading:
         # Use the stored cost_basis instead of recalculating
         cost_basis = self.cost_basis
         # Fetch current prices
-        symbols = [holding["asset_code"] + "-USD" for holding in holdings.get("results", [])]
+        symbols = [_to_binance_symbol(holding["asset_code"]) for holding in holdings.get("results", [])]
 
         # ALSO fetch prices for tracked coins even if not currently held (so GUI can show bid/ask lines)
         for s in crypto_symbols:
-            full = f"{s}-USD"
+            full = _to_binance_symbol(s)
             if full not in symbols:
                 symbols.append(full)
 
@@ -1626,14 +1630,14 @@ class CryptoAPITrading:
         for holding in holdings_list:
             try:
                 asset = holding.get("asset_code")
-                if asset == "USDC":
+                if asset == "USDC" or asset == "USDT":
                     continue
 
                 qty = float(holding.get("total_quantity", 0.0))
                 if qty <= 0.0:
                     continue
 
-                sym = f"{asset}-USD"
+                sym = _to_binance_symbol(asset)
                 bp = float(current_buy_prices.get(sym, 0.0) or 0.0)
                 sp = float(current_sell_prices.get(sym, 0.0) or 0.0)
 
@@ -1684,9 +1688,9 @@ class CryptoAPITrading:
         positions = {}
         for holding in holdings.get("results", []):
             symbol = holding["asset_code"]
-            full_symbol = f"{symbol}-USD"
+            full_symbol = _to_binance_symbol(symbol)
 
-            if full_symbol not in valid_symbols or symbol == "USDC":
+            if full_symbol not in valid_symbols or symbol == "USDC" or symbol == "USDT":
                 continue
 
             quantity = float(holding["total_quantity"])
@@ -2033,8 +2037,8 @@ class CryptoAPITrading:
                 if sym in positions:
                     continue
 
-                full_symbol = f"{sym}-USD"
-                if full_symbol not in valid_symbols or sym == "USDC":
+                full_symbol = _to_binance_symbol(sym)
+                if full_symbol not in valid_symbols or sym == "USDC" or sym == "USDT":
                     continue
 
                 current_buy_price = current_buy_prices.get(full_symbol, 0.0)
@@ -2080,12 +2084,12 @@ class CryptoAPITrading:
             allocation_in_usd = 0.5
 
 
-        holding_full_symbols = [f"{h['asset_code']}-USD" for h in holdings.get("results", [])]
+        holding_full_symbols = [_to_binance_symbol(h['asset_code']) for h in holdings.get("results", [])]
 
         start_index = 0
         while start_index < len(crypto_symbols):
             base_symbol = crypto_symbols[start_index].upper().strip()
-            full_symbol = f"{base_symbol}-USD"
+            full_symbol = _to_binance_symbol(base_symbol)
 
             # Skip if already held
             if full_symbol in holding_full_symbols:
@@ -2133,7 +2137,7 @@ class CryptoAPITrading:
                 )
                 time.sleep(5)
                 holdings = self.get_holdings()
-                holding_full_symbols = [f"{h['asset_code']}-USD" for h in holdings.get("results", [])]
+                holding_full_symbols = [_to_binance_symbol(h['asset_code']) for h in holdings.get("results", [])]
 
 
             start_index += 1
