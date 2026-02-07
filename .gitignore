@@ -59,6 +59,9 @@ env/
 node_modules/
 package-lock.json
 
+# --- Personal plans (not for upstream) ---
+plans/
+
 # --- IDE ---
 .vscode/
 .idea/
