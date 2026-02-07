@@ -201,6 +201,65 @@ def should_stop_training(loop_i, every=50):
 	except:
 		return False
 
+def save_checkpoint(tf_index, tf_total, coin):
+	"""Save training checkpoint so we can resume later."""
+	try:
+		with open("trainer_checkpoint.json", "w", encoding="utf-8") as f:
+			json.dump({
+				"coin": coin,
+				"tf_index": tf_index,
+				"tf_total": tf_total,
+				"timestamp": int(time.time()),
+			}, f)
+	except Exception:
+		pass
+
+def load_checkpoint(coin):
+	"""Load checkpoint if it exists and matches this coin. Returns tf_index or 0."""
+	try:
+		with open("trainer_checkpoint.json", "r", encoding="utf-8") as f:
+			ck = json.load(f)
+		if isinstance(ck, dict) and str(ck.get("coin", "")).upper() == coin.upper():
+			return int(ck.get("tf_index", 0))
+	except Exception:
+		pass
+	return 0
+
+def clear_checkpoint():
+	"""Remove checkpoint file after training completes."""
+	try:
+		if os.path.isfile("trainer_checkpoint.json"):
+			os.remove("trainer_checkpoint.json")
+	except Exception:
+		pass
+
+def write_progress(coin, tf_choice, tf_index, tf_total, candle_current=0, candle_total=0):
+	"""Write progress JSON for the Hub UI to read."""
+	try:
+		pct = 0
+		if tf_total > 0:
+			# Base progress from completed timeframes
+			base = (tf_index / tf_total) * 100
+			# Add partial progress within current timeframe
+			if candle_total > 0:
+				tf_pct = (candle_current / candle_total) * (100 / tf_total)
+			else:
+				tf_pct = 0
+			pct = min(100, base + tf_pct)
+		with open("trainer_progress.json", "w", encoding="utf-8") as f:
+			json.dump({
+				"coin": coin,
+				"timeframe": tf_choice,
+				"tf_index": tf_index,
+				"tf_total": tf_total,
+				"candle_current": candle_current,
+				"candle_total": candle_total,
+				"pct": round(pct, 1),
+				"timestamp": int(time.time()),
+			}, f)
+	except Exception:
+		pass
+
 def PrintException():
 	exc_type, exc_obj, tb = sys.exc_info()
 
@@ -272,8 +331,13 @@ try:
 except Exception:
 	pass
 
+# Write initial progress
+write_progress(_arg_coin, tf_choices[0], 0, len(tf_choices))
 
-the_big_index = 0
+# Resume from checkpoint if available
+the_big_index = load_checkpoint(_arg_coin)
+if the_big_index > 0:
+	print(f"Resuming from checkpoint: timeframe {the_big_index}/{len(tf_choices)} ({tf_choices[the_big_index] if the_big_index < len(tf_choices) else 'done'})")
 while True:
 	list_len = 0
 	restarting = 'no'
@@ -616,35 +680,32 @@ while True:
 			# Check stop signal occasionally (much less disk IO)
 			if should_stop_training(loop_i):
 				exited = 'yes'
-				print('finished processing')
+				print('training interrupted — saving checkpoint')
 				file = open('trainer_last_start_time.txt','w+')
 				file.write(str(start_time_yes))
 				file.close()
 
-				# Mark training finished for the GUI
-				try:
-					_trainer_finished_at = int(time.time())
-					file = open('trainer_last_training_time.txt','w+')
-					file.write(str(_trainer_finished_at))
-					file.close()
-				except:
-					pass
+				# Save checkpoint so training can resume later
+				save_checkpoint(the_big_index, len(tf_choices), _arg_coin)
+
+				# Mark training as interrupted (NOT finished) for the GUI
 				try:
 					with open("trainer_status.json", "w", encoding="utf-8") as f:
 						json.dump(
 							{
 								"coin": _arg_coin,
-								"state": "FINISHED",
+								"state": "INTERRUPTED",
 								"started_at": _trainer_started_at,
-								"finished_at": _trainer_finished_at,
-								"timestamp": _trainer_finished_at,
+								"tf_index": the_big_index,
+								"tf_total": len(tf_choices),
+								"timestamp": int(time.time()),
 							},
 							f,
 						)
 				except Exception:
 					pass
 
-				# Flush any cached memory/weights before we spin
+				# Flush any cached memory/weights before we exit
 				flush_memory(tf_choice, force=True)
 
 				sys.exit(0)
@@ -980,6 +1041,10 @@ while True:
 							pass
 					write_threshold_sometimes(tf_choice, perfect_threshold, loop_i, every=200)
 
+					# Write progress for Hub UI (throttled to match other IO)
+					if loop_i % 200 == 0:
+						write_progress(_arg_coin, tf_choice, the_big_index, len(tf_choices), price_list_length, len(price_list))
+
 					try:
 						index = 0
 						current_pattern_length = number_of_candles[number_of_candles_index]
@@ -1279,7 +1344,10 @@ while True:
 									if len(price_list2) == len(price_list):
 										the_big_index += 1
 										restarted_yet = 0
-										print('restarting')
+										print(f'timeframe {tf_choice} complete — moving to {the_big_index}/{len(tf_choices)}')
+										save_checkpoint(the_big_index, len(tf_choices), _arg_coin)
+										flush_memory(tf_choice, force=True)
+										write_progress(_arg_coin, tf_choice, the_big_index, len(tf_choices))
 										restarting = 'yes'
 										avg50 = []
 										import sys
@@ -1382,7 +1450,9 @@ while True:
 										print(len(tf_choices))
 										if the_big_index >= len(tf_choices):
 											if len(number_of_candles) == 1:
-												print("Finished processing all timeframes (number_of_candles has only one entry). Exiting.")
+												print("Finished processing all timeframes. Exiting.")
+												clear_checkpoint()
+												write_progress(_arg_coin, "done", len(tf_choices), len(tf_choices), 0, 0)
 												try:
 													file = open('trainer_last_start_time.txt','w+')
 													file.write(str(start_time_yes))

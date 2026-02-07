@@ -2255,8 +2255,19 @@ class PowerTraderHub(tk.Tk):
         train_buttons_row = ttk.Frame(training_left)
         train_buttons_row.pack(fill="x", padx=6, pady=(6, 6))
 
-        ttk.Button(train_buttons_row, text="Train Selected", width=BTN_W, command=self.train_selected_coin).pack(anchor="w", pady=(0, 6))
-        ttk.Button(train_buttons_row, text="Train All", width=BTN_W, command=self.train_all_coins).pack(anchor="w")
+        ttk.Button(train_buttons_row, text="Train Selected", width=BTN_W, command=self.train_selected_coin).pack(anchor="w", pady=(0, 3))
+        ttk.Button(train_buttons_row, text="Train All", width=BTN_W, command=self.train_all_coins).pack(anchor="w", pady=(0, 6))
+        ttk.Button(train_buttons_row, text="Force Retrain", width=BTN_W, command=self.force_retrain_selected_coin).pack(anchor="w", pady=(0, 3))
+        ttk.Button(train_buttons_row, text="Force Retrain All", width=BTN_W, command=self.force_retrain_all_coins).pack(anchor="w")
+
+        # Training progress bar
+        self.lbl_training_progress = ttk.Label(training_left, text="")
+        self.lbl_training_progress.pack(anchor="w", padx=6, pady=(0, 2))
+
+        self.training_progress_bar = ttk.Progressbar(
+            training_left, orient="horizontal", mode="determinate", length=200
+        )
+        self.training_progress_bar.pack(fill="x", padx=6, pady=(0, 4))
 
         # Training status (per-coin + gating reason)
         self.lbl_training_overview = ttk.Label(training_left, text="Training: N/A")
@@ -3204,11 +3215,13 @@ class PowerTraderHub(tk.Tk):
         if not folder or not os.path.isdir(folder):
             return False
 
-        # If trainer reports it's currently training, it's not "trained" yet.
+        # If trainer reports it's currently training or was interrupted, it's not "trained" yet.
         try:
             st = _safe_read_json(os.path.join(folder, "trainer_status.json"))
-            if isinstance(st, dict) and str(st.get("state", "")).upper() == "TRAINING":
-                return False
+            if isinstance(st, dict):
+                state = str(st.get("state", "")).upper()
+                if state in ("TRAINING", "INTERRUPTED"):
+                    return False
         except Exception:
             pass
 
@@ -3273,9 +3286,19 @@ class PowerTraderHub(tk.Tk):
 
 
 
+    def _coin_has_checkpoint(self, coin: str) -> bool:
+        coin = coin.upper().strip()
+        folder = self.coin_folders.get(coin, "")
+        if not folder:
+            return False
+        try:
+            return os.path.isfile(os.path.join(folder, "trainer_checkpoint.json"))
+        except Exception:
+            return False
+
     def _training_status_map(self) -> Dict[str, str]:
         """
-        Returns {coin: "TRAINED" | "TRAINING" | "NOT TRAINED"}.
+        Returns {coin: "TRAINED" | "TRAINING" | "INTERRUPTED" | "NOT TRAINED"}.
         """
         running = set(self._running_trainers())
         out: Dict[str, str] = {}
@@ -3284,25 +3307,88 @@ class PowerTraderHub(tk.Tk):
                 out[c] = "TRAINING"
             elif self._coin_is_trained(c):
                 out[c] = "TRAINED"
+            elif self._coin_has_checkpoint(c):
+                out[c] = "INTERRUPTED"
             else:
                 out[c] = "NOT TRAINED"
         return out
 
-    def train_selected_coin(self) -> None:
+    def _refresh_training_progress(self, training_running: list) -> None:
+        """Read trainer_progress.json from running trainers and update the progress bar."""
+        try:
+            if not training_running:
+                self.lbl_training_progress.config(text="")
+                self.training_progress_bar["value"] = 0
+                return
+
+            # Aggregate progress across all running trainers
+            total_coins = len(training_running)
+            coin_progress = []  # list of (coin, tf_label, pct)
+            for coin in training_running:
+                folder = self.coin_folders.get(coin, "")
+                if not folder:
+                    continue
+                prog_path = os.path.join(folder, "trainer_progress.json")
+                prog = _safe_read_json(prog_path)
+                if isinstance(prog, dict):
+                    tf = str(prog.get("timeframe", "?"))
+                    tf_idx = int(prog.get("tf_index", 0))
+                    tf_total = int(prog.get("tf_total", 7))
+                    pct = float(prog.get("pct", 0))
+                    coin_progress.append((coin, f"{tf} [{tf_idx + 1}/{tf_total}]", pct))
+                else:
+                    coin_progress.append((coin, "starting...", 0))
+
+            if not coin_progress:
+                self.lbl_training_progress.config(text="Training...")
+                self.training_progress_bar["value"] = 0
+                return
+
+            # Show first running coin's detail (most useful in single-coin training)
+            # For multi-coin, show overall
+            if len(coin_progress) == 1:
+                c, detail, pct = coin_progress[0]
+                self.lbl_training_progress.config(text=f"{c}: {detail} ({pct:.0f}%)")
+                self.training_progress_bar["value"] = pct
+            else:
+                avg_pct = sum(p[2] for p in coin_progress) / len(coin_progress)
+                details = ", ".join(f"{c}: {d}" for c, d, _ in coin_progress)
+                self.lbl_training_progress.config(text=f"Training {len(coin_progress)} coins ({avg_pct:.0f}%)")
+                self.training_progress_bar["value"] = avg_pct
+
+        except Exception:
+            pass
+
+    def train_selected_coin(self, force_retrain: bool = False) -> None:
         coin = (getattr(self, 'train_coin_var', self.trainer_coin_var).get() or "").strip().upper()
 
         if not coin:
             return
         # Reuse the trainers pane runner — start trainer for selected coin
-        self.start_trainer_for_selected_coin()
+        self.start_trainer_for_selected_coin(force_retrain=force_retrain)
 
-    def train_all_coins(self) -> None:
-        # Start trainers for every coin (in parallel)
+    def force_retrain_selected_coin(self) -> None:
+        self.train_selected_coin(force_retrain=True)
+
+    def train_all_coins(self, force_retrain: bool = False) -> None:
+        # Start trainers for every coin; skip already-trained unless force_retrain
+        skipped = []
         for c in self.coins:
+            if (not force_retrain) and self._coin_is_trained(c):
+                skipped.append(c)
+                continue
             self.trainer_coin_var.set(c)
-            self.start_trainer_for_selected_coin()
+            self.start_trainer_for_selected_coin(force_retrain=force_retrain)
+        if skipped:
+            try:
+                self.status.config(text=f"Skipped already-trained: {', '.join(skipped)}")
+            except Exception:
+                pass
 
-    def start_trainer_for_selected_coin(self) -> None:
+    def force_retrain_all_coins(self) -> None:
+        self.train_all_coins(force_retrain=True)
+
+    def start_trainer_for_selected_coin(self, force_retrain: bool = False) -> None:
         coin = (self.trainer_coin_var.get() or "").strip().upper()
         if not coin:
             return
@@ -3348,35 +3434,46 @@ class PowerTraderHub(tk.Tk):
         if coin in self.trainers and self.trainers[coin].info.proc and self.trainers[coin].info.proc.poll() is None:
             return
 
+        # Only wipe training artifacts on force retrain; normal training preserves existing data
+        if force_retrain:
+            try:
+                patterns = [
+                    "trainer_last_training_time.txt",
+                    "trainer_status.json",
+                    "trainer_last_start_time.txt",
+                    "trainer_checkpoint.json",
+                    "trainer_progress.json",
+                    "killer.txt",
+                    "memories_*.txt",
+                    "memory_weights_*.txt",
+                    "neural_perfect_threshold_*.txt",
+                ]
 
-        try:
-            patterns = [
-                "trainer_last_training_time.txt",
-                "trainer_status.json",
-                "trainer_last_start_time.txt",
-                "killer.txt",
-                "memories_*.txt",
-                "memory_weights_*.txt",
-                "neural_perfect_threshold_*.txt",
-            ]
+                deleted = 0
+                for pat in patterns:
+                    for fp in glob.glob(os.path.join(coin_cwd, pat)):
+                        try:
+                            os.remove(fp)
+                            deleted += 1
+                        except Exception:
+                            pass
 
-
-            deleted = 0
-            for pat in patterns:
-                for fp in glob.glob(os.path.join(coin_cwd, pat)):
+                if deleted:
                     try:
-                        os.remove(fp)
-                        deleted += 1
+                        self.status.config(text=f"Deleted {deleted} training file(s) for {coin} (force retrain)")
                     except Exception:
                         pass
-
-            if deleted:
+            except Exception:
+                pass
+        else:
+            # Just clear the killer signal and status so the trainer can start fresh
+            for fname in ["killer.txt", "trainer_status.json"]:
                 try:
-                    self.status.config(text=f"Deleted {deleted} training file(s) for {coin} before training")
+                    fp = os.path.join(coin_cwd, fname)
+                    if os.path.isfile(fp):
+                        os.remove(fp)
                 except Exception:
                     pass
-        except Exception:
-            pass
 
         q: "queue.Queue[str]" = queue.Queue()
         info = ProcInfo(name=f"Trainer-{coin}", path=trainer_path)
@@ -3530,21 +3627,41 @@ class PowerTraderHub(tk.Tk):
         try:
             training_running = [c for c, s in status_map.items() if s == "TRAINING"]
             not_trained = [c for c, s in status_map.items() if s == "NOT TRAINED"]
+            interrupted = [c for c, s in status_map.items() if s == "INTERRUPTED"]
 
             if training_running:
                 self.lbl_training_overview.config(text=f"Training: RUNNING ({', '.join(training_running)})")
+            elif interrupted:
+                self.lbl_training_overview.config(text=f"Training: {len(interrupted)} INTERRUPTED (will resume)")
             elif not_trained:
                 self.lbl_training_overview.config(text=f"Training: REQUIRED ({len(not_trained)} not trained)")
             else:
                 self.lbl_training_overview.config(text="Training: READY (all trained)")
 
-            # show each coin status (ONLY redraw the list if it actually changed)
-            sig = tuple((c, status_map.get(c, "N/A")) for c in self.coins)
+            # show each coin status with progress detail
+            # Build enriched entries for TRAINING and INTERRUPTED coins
+            enriched = []
+            for c in self.coins:
+                st = status_map.get(c, "N/A")
+                detail = ""
+                if st in ("TRAINING", "INTERRUPTED"):
+                    folder = self.coin_folders.get(c, "")
+                    if folder:
+                        prog = _safe_read_json(os.path.join(folder, "trainer_progress.json"))
+                        if isinstance(prog, dict):
+                            tf = str(prog.get("timeframe", "?"))
+                            tf_idx = int(prog.get("tf_index", 0))
+                            tf_total = int(prog.get("tf_total", 7))
+                            pct = float(prog.get("pct", 0))
+                            detail = f" — {tf} [{tf_idx + 1}/{tf_total}] {pct:.0f}%"
+                enriched.append(f"{c}: {st}{detail}")
+
+            sig = tuple(enriched)
             if getattr(self, "_last_training_sig", None) != sig:
                 self._last_training_sig = sig
                 self.training_list.delete(0, "end")
-                for c, st in sig:
-                    self.training_list.insert("end", f"{c}: {st}")
+                for entry in enriched:
+                    self.training_list.insert("end", entry)
 
             # show gating hint (Start All handles the runner->ready->trader sequence)
             if not all_trained:
@@ -3555,6 +3672,12 @@ class PowerTraderHub(tk.Tk):
                 self.lbl_flow_hint.config(text="Flow: Running (use the button to stop)")
             else:
                 self.lbl_flow_hint.config(text="Flow: Start All")
+        except Exception:
+            pass
+
+        # Training progress bar (reads trainer_progress.json from active trainers)
+        try:
+            self._refresh_training_progress(self._running_trainers())
         except Exception:
             pass
 
