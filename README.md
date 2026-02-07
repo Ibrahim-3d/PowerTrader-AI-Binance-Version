@@ -75,7 +75,11 @@ IMPORTANT: This software places real trades automatically. You are responsible f
 
 ---
 
-## Step 3 — Install PowerTrader AI (one command)
+## Step 3 — Install PowerTrader AI
+
+**Easy way (no terminal needed):** Double-click **`Install_Dependencies.bat`** and wait for it to finish.
+
+**OR** do it manually with Command Prompt:
 
 1. Open **Command Prompt** (Windows key → type **cmd** → Enter).
 2. Go into your PowerTrader AI folder. Example:
@@ -94,11 +98,13 @@ IMPORTANT: This software places real trades automatically. You are responsible f
 
 ## Step 4 — Start PowerTrader AI
 
-From the same Command Prompt window (inside your PowerTrader folder), run:
+**Easy way (no terminal needed):** Double-click **`PowerTrader.bat`** — it will auto-install dependencies if needed and launch the Hub.
+
+**OR** from Command Prompt (inside your PowerTrader folder), run:
 
 `python pt_hub.py`
 
-The app that opens is the **PowerTrader Hub**.  
+The app that opens is the **PowerTrader Hub**.
 This is the only thing you need to run day-to-day.
 
 ---
@@ -171,6 +177,22 @@ A TRADE WILL START FOR A COIN IF THAT COIN REACHES A LONG LEVEL OF 3 OR HIGHER W
 3. Save
 4. Click **Train All**, wait for training to complete
 5. Click **Start All**
+
+---
+
+## Quick Launch Scripts (.bat files)
+
+For users who prefer not to use the terminal, the following batch files are included. Just double-click them!
+
+| File | What it does |
+|---|---|
+| **`PowerTrader.bat`** | Launches the PowerTrader Hub GUI. Auto-checks for Python and installs dependencies if missing. **This is the main one you need.** |
+| **`Install_Dependencies.bat`** | One-click installer for all required Python packages. Run this once on a fresh setup. |
+| **`Train_All.bat`** | Trains models for BTC and all other configured coins sequentially. |
+| **`Run_Thinker.bat`** | Launches the signal generator (pt_thinker) standalone. |
+| **`Run_Trader.bat`** | Launches the trade executor (pt_trader) standalone. Shows a warning before starting since it places real trades. |
+
+For day-to-day use, all you need is **`PowerTrader.bat`** — the Hub controls everything else.
 
 ---
 
