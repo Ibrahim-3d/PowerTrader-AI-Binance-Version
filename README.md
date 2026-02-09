@@ -74,12 +74,20 @@ cd PowerTrader_AI
 
 ### Step 3 — Install dependencies
 
+**Easy way:** Double-click **`Install_Dependencies.bat`** — no terminal needed.
+
+**OR** manually:
+
 ```bash
 python -m pip install setuptools   # Python 3.12+ only
 python -m pip install -r requirements.txt
 ```
 
 ### Step 4 — Start the Hub
+
+**Easy way:** Double-click **`PowerTrader.bat`** — it auto-installs deps if needed and launches the Hub.
+
+**OR** manually:
 
 ```bash
 python pt_hub.py
