@@ -3,7 +3,7 @@ Fully automated crypto trading powered by a custom price prediction AI and a str
 
 I have not checked any PowerTrader AI forks and cannot confirm or deny their legitimacy.
 
-This is my personal trading bot that I decided to make open source. I made this strategy to match my personal goals. This system is meant to be a foundation/framework for you to build your dream bot!
+This is my personal trading bot that I decided to make open source. I made this strategy to match my personal goals. This system is meant to be a foundation/framework for you to build your dream bot! You are responsible for all financial and security risks associated with PowerTrader AI.
 
 I know there are "commonly essential" trading features that are missing (like no stop loss for example). This is by design because many of those things would just not work with this system's strategy as it stands, for my personal reasons below:
 
