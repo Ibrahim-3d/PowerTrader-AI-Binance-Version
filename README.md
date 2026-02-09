@@ -1,7 +1,7 @@
 # PowerTrader_AI
 Fully automated crypto trading powered by a custom price prediction AI and a structured/tiered DCA system.
 
-DO NOT TRUST THE POWERTRADER FORK FROM Drizztdowhateva!!!
+I have not checked any PowerTrader AI forks and cannot confirm or deny their legitimacy.
 
 This is my personal trading bot that I decided to make open source. I made this strategy to match my personal goals. This system is meant to be a foundation/framework for you to build your dream bot!
 
