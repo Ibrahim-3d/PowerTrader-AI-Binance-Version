@@ -3,7 +3,8 @@
 
 
 def main() -> None:
-    raise NotImplementedError("Hub runner not yet migrated — use pt_hub.py directly.")
+    from powertrader.hub.app import main as hub_main
+    hub_main()
 
 
 if __name__ == "__main__":
