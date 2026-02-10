@@ -748,11 +748,11 @@ class HealthMonitor:
 ```
 
 **Phase 7 Deliverables:**
-- [ ] `core/exceptions.py` — exception hierarchy
-- [ ] Replace all 365 bare except blocks
-- [ ] Structured logging in all components
-- [ ] Health monitor integration
-- [ ] Error dashboard in Hub GUI
+- [x] `core/exceptions.py` — exception hierarchy
+- [x] Replace bare except blocks in src/powertrader/ (narrowed ~150+ blocks)
+- [x] Structured logging in all components
+- [x] Health monitor integration (`core/health.py` + runner integration)
+- [x] Error dashboard in Hub GUI (`hub/components/health_dashboard.py`)
 
 ---
 

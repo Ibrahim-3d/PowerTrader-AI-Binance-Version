@@ -22,6 +22,8 @@ from powertrader.core.constants import (
     TIMEFRAMES,
     TRAINER_LOOKBACK_CANDLES,
 )
+from powertrader.core.exceptions import TrainingError
+from powertrader.core.health import HealthMonitor
 from powertrader.core.market_client import MarketDataClient
 from powertrader.core.paths import CoinPaths, build_coin_paths
 from powertrader.core.storage import FileStore
@@ -62,12 +64,14 @@ class TrainerRunner:
         store: FileStore,
         base_dir: Path,
         on_progress: Callable[[str, str, int, int], None] | None = None,
+        health: HealthMonitor | None = None,
     ) -> None:
         self._market = market
         self._config = config
         self._store = store
         self._base_dir = base_dir
         self._on_progress = on_progress
+        self._health = health
         self._coin_paths: dict[str, CoinPaths] = {}
 
     # -- public API -----------------------------------------------------------
@@ -157,9 +161,16 @@ class TrainerRunner:
                 self._train_timeframe(coin, paths, timeframe, reprocess=reprocess)
             except _StopTrainingError:
                 raise
+            except (TrainingError, OSError, ConnectionError) as exc:
+                logger.error("Training %s/%s failed: %s", coin, timeframe, exc)
+                if self._health:
+                    self._health.record_error("trainer", exc)
             except Exception as exc:
-                logger.error("Training %s/%s failed: %s", coin, timeframe, exc, exc_info=True)
-                # Continue with next timeframe on non-fatal errors
+                logger.error(
+                    "Training %s/%s unexpected error: %s", coin, timeframe, exc, exc_info=True
+                )
+                if self._health:
+                    self._health.record_error("trainer", exc)
 
         logger.info("Training complete for %s", coin)
 
@@ -230,6 +241,8 @@ class TrainerRunner:
             memory.size,
             memory.threshold,
         )
+        if self._health:
+            self._health.record_heartbeat("trainer")
 
     # -- memory I/O -----------------------------------------------------------
 

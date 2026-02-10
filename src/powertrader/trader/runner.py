@@ -13,6 +13,8 @@ from pathlib import Path
 
 from powertrader.core.config import TradingConfig
 from powertrader.core.constants import QUOTE_ASSET
+from powertrader.core.exceptions import ExchangeError
+from powertrader.core.health import HealthMonitor
 from powertrader.core.paths import CoinPaths, build_coin_paths
 from powertrader.core.storage import FileStore
 from powertrader.core.trading_client import TradingClient
@@ -63,6 +65,7 @@ class TraderRunner:
         config: TradingConfig,
         store: FileStore,
         base_dir: Path,
+        health: HealthMonitor | None = None,
     ) -> None:
         self._client = trading_client
         self._entry = entry
@@ -71,6 +74,7 @@ class TraderRunner:
         self._config = config
         self._store = store
         self._base_dir = base_dir
+        self._health = health
         self._hub_dir = base_dir / _HUB_DATA_DIR
         self._coin_paths = build_coin_paths(base_dir, config.coins)
         self._positions: dict[str, Position] = {}
@@ -88,8 +92,16 @@ class TraderRunner:
         while self._running:
             try:
                 self.step()
+                if self._health:
+                    self._health.record_heartbeat("trader")
+            except (ExchangeError, OSError, ConnectionError) as exc:
+                logger.error("Trade management error: %s", exc)
+                if self._health:
+                    self._health.record_error("trader", exc)
             except Exception as exc:
-                logger.error("Trade management error: %s", exc, exc_info=True)
+                logger.error("Unexpected trade management error: %s", exc, exc_info=True)
+                if self._health:
+                    self._health.record_error("trader", exc)
             time.sleep(_LOOP_SLEEP_SECONDS)
 
         logger.info("Trader stopped")
@@ -142,8 +154,11 @@ class TraderRunner:
         """
         try:
             holdings = self._client.get_holdings()
-        except Exception as exc:
+        except (ExchangeError, OSError, ConnectionError) as exc:
             logger.error("Failed to fetch holdings: %s", exc)
+            return
+        except Exception as exc:
+            logger.error("Unexpected error fetching holdings: %s", exc, exc_info=True)
             return
 
         # Add newly detected positions
@@ -376,8 +391,11 @@ class TraderRunner:
         """Calculate total account value (USDT + holdings)."""
         try:
             balances = self._client.get_account_balance()
-        except Exception as exc:
+        except (ExchangeError, OSError, ConnectionError) as exc:
             logger.error("Failed to fetch account balance: %s", exc)
+            return 0.0
+        except Exception as exc:
+            logger.error("Unexpected error fetching balance: %s", exc, exc_info=True)
             return 0.0
 
         total = balances.get(QUOTE_ASSET, 0.0)

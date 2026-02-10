@@ -5,6 +5,7 @@ from powertrader.hub.components.signal_tile import NeuralSignalTile
 from powertrader.hub.components.candle_fetcher import CandleFetcher
 from powertrader.hub.components.candle_chart import CandleChart
 from powertrader.hub.components.account_chart import AccountValueChart
+from powertrader.hub.components.health_dashboard import HealthDashboard
 
 __all__ = [
     "WrapFrame",
@@ -12,4 +13,5 @@ __all__ = [
     "CandleFetcher",
     "CandleChart",
     "AccountValueChart",
+    "HealthDashboard",
 ]

@@ -126,7 +126,7 @@ class NeuralSignalTile(ttk.Frame):
                 )
                 self.title_lbl.configure(foreground=self._normal_fg)
                 self.value_lbl.configure(foreground=self._normal_fg)
-        except Exception:
+        except tk.TclError:
             pass
 
     def set_trade_start_level(self, level: Any) -> None:
@@ -136,27 +136,27 @@ class NeuralSignalTile(ttk.Frame):
     def _clamp_trade_start_level(self, value: Any) -> int:
         try:
             v = int(float(value))
-        except Exception:
+        except (TypeError, ValueError):
             v = 3
         return max(1, min(v, self._display_levels))
 
     def _update_trade_lines(self) -> None:
         try:
             x0, x1, x2, x3, yb = self._trade_line_geom
-        except Exception:
+        except (AttributeError, ValueError):
             return
         k = max(0, min(int(self._trade_start_level) - 1, self._display_levels))
         y = int(round(yb - (k * self._bar_h / self._display_levels)))
         try:
             self.canvas.coords(self._trade_line_long, x0, y, x1, y)
             self.canvas.coords(self._trade_line_short, x2, y, x3, y)
-        except Exception:
+        except tk.TclError:
             pass
 
     def _clamp_level(self, value: Any) -> int:
         try:
             v = int(float(value))
-        except Exception:
+        except (TypeError, ValueError):
             v = 0
         return max(0, min(v, self._levels - 1))
 

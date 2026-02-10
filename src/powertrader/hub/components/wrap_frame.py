@@ -32,7 +32,7 @@ class WrapFrame(ttk.Frame):
         for it in list(self._items):
             try:
                 it.w.grid_forget()
-            except Exception:
+            except tk.TclError:
                 pass
             if destroy_widgets:
                 try:

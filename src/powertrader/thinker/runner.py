@@ -19,6 +19,7 @@ from powertrader.core.constants import (
     TIMEFRAMES,
     TRAINING_STALE_SECONDS,
 )
+from powertrader.core.health import HealthMonitor
 from powertrader.core.market_client import MarketDataClient
 from powertrader.core.paths import CoinPaths, build_coin_paths
 from powertrader.core.storage import FileStore
@@ -53,11 +54,13 @@ class ThinkerRunner:
         config: TradingConfig,
         store: FileStore,
         base_dir: Path,
+        health: HealthMonitor | None = None,
     ) -> None:
         self._market = market
         self._config = config
         self._store = store
         self._base_dir = base_dir
+        self._health = health
         self._coins: list[str] = list(config.coins)
         self._coin_paths: dict[str, CoinPaths] = build_coin_paths(base_dir, self._coins)
         self._settings_mtime: float = 0.0
@@ -96,8 +99,17 @@ class ThinkerRunner:
                 if signal is not None:
                     signals[coin] = signal
                     self._write_signal_files(paths, signal)
+            except (OSError, ConnectionError) as exc:
+                logger.error("Signal generation I/O error for %s: %s", coin, exc)
+                if self._health:
+                    self._health.record_error("thinker", exc)
             except Exception as exc:
-                logger.error("Signal generation failed for %s: %s", coin, exc)
+                logger.error("Signal generation failed for %s: %s", coin, exc, exc_info=True)
+                if self._health:
+                    self._health.record_error("thinker", exc)
+
+        if self._health:
+            self._health.record_heartbeat("thinker")
 
         return signals
 
