@@ -57,9 +57,10 @@ class BinanceCredentials:
             if key and secret:
                 logger.info("Loaded Binance credentials from OS keyring.")
                 return cls(api_key=key, api_secret=secret)
-        except Exception:
-            # keyring not installed or not usable — fall through
-            pass
+        except ImportError:
+            logger.debug("keyring package not installed, skipping keyring lookup.")
+        except Exception as exc:
+            logger.debug("Keyring lookup failed: %s", exc)
 
         # 3. Legacy plaintext files
         if base_dir is None:

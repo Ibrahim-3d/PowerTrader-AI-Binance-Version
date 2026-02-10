@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import time
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ---- Settings defaults ----
@@ -47,7 +50,8 @@ def safe_read_json(path: str) -> Optional[dict]:
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        logger.debug("safe_read_json(%s) failed: %s", path, exc)
         return None
 
 
@@ -74,10 +78,10 @@ def read_trade_history_jsonl(path: str) -> List[dict]:
                         if side not in ("buy", "sell"):
                             continue
                         out.append(obj)
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError):
                         continue
-    except Exception:
-        pass
+    except OSError as exc:
+        logger.debug("read_trade_history_jsonl(%s) failed: %s", path, exc)
     return out
 
 
@@ -91,7 +95,7 @@ def fmt_money(x: float) -> str:
     """Format a USD amount as $1,234.56."""
     try:
         return f"${float(x):,.2f}"
-    except Exception:
+    except (TypeError, ValueError):
         return "N/A"
 
 
@@ -123,14 +127,14 @@ def fmt_price(x: Any) -> str:
         if "." in s:
             s = s.rstrip("0").rstrip(".")
         return f"{sign}${s}"
-    except Exception:
+    except (TypeError, ValueError):
         return "N/A"
 
 
 def fmt_pct(x: float) -> str:
     try:
         return f"{float(x):+.2f}%"
-    except Exception:
+    except (TypeError, ValueError):
         return "N/A"
 
 
@@ -187,7 +191,7 @@ def read_price_levels_from_html(path: str) -> List[float]:
                 if v >= 9e15:
                     continue
                 vals.append(v)
-            except Exception:
+            except (TypeError, ValueError):
                 pass
         out: List[float] = []
         seen: set = set()
@@ -198,7 +202,8 @@ def read_price_levels_from_html(path: str) -> List[float]:
             seen.add(key)
             out.append(v)
         return out
-    except Exception:
+    except OSError as exc:
+        logger.debug("read_price_levels_from_html(%s) failed: %s", path, exc)
         return []
 
 
@@ -207,7 +212,8 @@ def read_int_from_file(path: str) -> int:
         with open(path, "r", encoding="utf-8") as f:
             raw = f.read().strip()
         return int(float(raw))
-    except Exception:
+    except (OSError, ValueError) as exc:
+        logger.debug("read_int_from_file(%s) failed: %s", path, exc)
         return 0
 
 

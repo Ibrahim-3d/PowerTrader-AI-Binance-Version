@@ -15,6 +15,8 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 from matplotlib.transforms import blended_transform_factory
 
+import logging
+
 from powertrader.hub.components.candle_fetcher import CandleFetcher
 from powertrader.hub.theme import DARK_BG, DARK_BG2, DARK_BORDER, DARK_FG, DARK_PANEL
 from powertrader.hub.utils import (
@@ -24,6 +26,9 @@ from powertrader.hub.utils import (
     read_short_signal,
     read_trade_history_jsonl,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class CandleChart(ttk.Frame):
@@ -65,13 +70,13 @@ class CandleChart(ttk.Frame):
             try:
                 if self._tf_after_id:
                     self.after_cancel(self._tf_after_id)
-            except Exception:
+            except (ValueError, tk.TclError):
                 pass
 
             def _do() -> None:
                 try:
                     self.event_generate("<<TimeframeChanged>>", when="tail")
-                except Exception:
+                except tk.TclError:
                     pass
 
             self._tf_after_id = self.after(120, _do)
@@ -114,11 +119,11 @@ class CandleChart(ttk.Frame):
                 if self._resize_after_id:
                     try:
                         self.after_cancel(self._resize_after_id)
-                    except Exception:
+                    except (ValueError, tk.TclError):
                         pass
                 self._resize_after_id = self.after_idle(self.canvas.draw_idle)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Canvas configure error: %s", exc)
 
         canvas_w.bind("<Configure>", _on_canvas_configure, add="+")
 
@@ -133,8 +138,8 @@ class CandleChart(ttk.Frame):
             for spine in self.ax.spines.values():
                 spine.set_color(DARK_BORDER)
             self.ax.grid(True, color=DARK_BORDER, linewidth=0.6, alpha=0.35)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to apply dark chart style: %s", exc)
 
     def refresh(
         self,
@@ -158,7 +163,7 @@ class CandleChart(ttk.Frame):
         def _cached(path: str, loader: Callable, default: Any) -> Any:
             try:
                 mtime = os.path.getmtime(path)
-            except Exception:
+            except OSError:
                 return default
             hit = self._neural_cache.get(path)
             if hit and hit[0] == mtime:
@@ -179,7 +184,7 @@ class CandleChart(ttk.Frame):
             self.ax.patches.clear()
             self.ax.collections.clear()
             self.ax.texts.clear()
-        except Exception:
+        except AttributeError:
             self.ax.cla()
             self._apply_dark_chart_style()
 
@@ -228,49 +233,49 @@ class CandleChart(ttk.Frame):
             if not math.isfinite(pad) or pad <= 0:
                 pad = max(abs(y_low) * 0.001, 1e-6)
             self.ax.set_ylim(y_low - pad, y_high + pad)
-        except Exception:
-            pass
+        except (TypeError, ValueError) as exc:
+            logger.debug("Failed to set y limits: %s", exc)
 
         for lv in long_levels:
             try:
                 self.ax.axhline(y=float(lv), linewidth=1, color="blue", alpha=0.8)
-            except Exception:
+            except (TypeError, ValueError):
                 pass
 
         for lv in short_levels:
             try:
                 self.ax.axhline(y=float(lv), linewidth=1, color="orange", alpha=0.8)
-            except Exception:
+            except (TypeError, ValueError):
                 pass
 
         try:
             if trail_line is not None and float(trail_line) > 0:
                 self.ax.axhline(y=float(trail_line), linewidth=1.5, color="green", alpha=0.95)
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
         try:
             if dca_line_price is not None and float(dca_line_price) > 0:
                 self.ax.axhline(y=float(dca_line_price), linewidth=1.5, color="red", alpha=0.95)
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
         try:
             if avg_cost_basis is not None and float(avg_cost_basis) > 0:
                 self.ax.axhline(y=float(avg_cost_basis), linewidth=1.5, color="yellow", alpha=0.95)
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
         try:
             if current_buy_price is not None and float(current_buy_price) > 0:
                 self.ax.axhline(y=float(current_buy_price), linewidth=1.5, color="purple", alpha=0.95)
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
         try:
             if current_sell_price is not None and float(current_sell_price) > 0:
                 self.ax.axhline(y=float(current_sell_price), linewidth=1.5, color="teal", alpha=0.95)
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
         try:
@@ -286,7 +291,7 @@ class CandleChart(ttk.Frame):
                     yy = float(y)
                     if (not math.isfinite(yy)) or yy <= 0:
                         return
-                except Exception:
+                except (TypeError, ValueError):
                     return
                 for prev in used_y:
                     if abs(yy - prev) < y_pad:
@@ -304,8 +309,8 @@ class CandleChart(ttk.Frame):
             _label_right(avg_cost_basis, "AVG", "yellow")
             _label_right(dca_line_price, "DCA", "red")
             _label_right(trail_line, "SELL", "green")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to draw chart labels: %s", exc)
 
         try:
             trades = read_trade_history_jsonl(self.trade_history_path) if self.trade_history_path else []
@@ -337,7 +342,7 @@ class CandleChart(ttk.Frame):
                         continue
                     try:
                         tts = float(tts)
-                    except Exception:
+                    except (TypeError, ValueError):
                         continue
                     if tts < t_min or tts > t_max:
                         continue
@@ -355,12 +360,12 @@ class CandleChart(ttk.Frame):
                         p = tr.get("price", None)
                         if p is not None and float(p) > 0:
                             y = float(p)
-                    except Exception:
+                    except (TypeError, ValueError):
                         y = None
                     if y is None:
                         try:
                             y = float(candles[idx].get("close", 0.0))
-                        except Exception:
+                        except (TypeError, ValueError):
                             y = None
                     if y is None:
                         continue
@@ -371,8 +376,8 @@ class CandleChart(ttk.Frame):
                         label, (x, y), textcoords="offset points", xytext=(0, 10),
                         ha="center", fontsize=8, color=DARK_FG, zorder=7,
                     )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to draw trade markers: %s", exc)
 
         self.ax.set_xlim(-0.5, (len(candles) - 0.5) + 0.6)
         self.ax.set_title(f"{self.coin} ({tf})", color=DARK_FG)
@@ -405,8 +410,8 @@ class CandleChart(ttk.Frame):
             self.ax.set_xticks(tick_x)
             self.ax.set_xticklabels(tick_lbl)
             self.ax.tick_params(axis="x", labelsize=8)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to set x tick labels: %s", exc)
 
         self.canvas.draw_idle()
 
@@ -420,7 +425,7 @@ class CandleChart(ttk.Frame):
                 last_ts = os.path.getmtime(low_path)
             elif os.path.isfile(high_path):
                 last_ts = os.path.getmtime(high_path)
-        except Exception:
+        except OSError:
             last_ts = None
 
         if last_ts:

@@ -10,8 +10,12 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Set, Tuple
 
+import logging
+
 from powertrader.hub.theme import DARK_BG, DARK_BG2, DARK_BORDER, DARK_FG
 from powertrader.hub.utils import DEFAULT_SETTINGS, fmt_money
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -80,15 +84,15 @@ class SettingsDialog:
                     settings_scroll.grid_remove()
                     try:
                         c.yview_moveto(0)
-                    except Exception:
+                    except tk.TclError:
                         pass
-            except Exception:
-                pass
+            except tk.TclError as exc:
+                logger.debug("Scrollbar update error: %s", exc)
 
         def _on_settings_canvas_configure(e: Any) -> None:
             try:
                 settings_canvas.itemconfigure(settings_window, width=int(e.width))
-            except Exception:
+            except tk.TclError:
                 pass
             _update_settings_scrollbars()
 
@@ -99,7 +103,7 @@ class SettingsDialog:
             try:
                 if settings_scroll.winfo_ismapped():
                     settings_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-            except Exception:
+            except tk.TclError:
                 pass
 
         settings_canvas.bind("<Enter>", lambda _e: settings_canvas.focus_set(), add="+")
@@ -169,7 +173,7 @@ class SettingsDialog:
             try:
                 pct_txt = (start_alloc_pct_var.get() or "").strip().replace("%", "")
                 pct = float(pct_txt) if pct_txt else 0.0
-            except Exception:
+            except (TypeError, ValueError):
                 pct = float(s.get("start_allocation_pct", 0.005) or 0.005)
             if pct < 0.0:
                 pct = 0.0
@@ -236,7 +240,7 @@ class SettingsDialog:
                 dm = (dca_mult_var.get() or "").strip()
                 try:
                     dm_f = float(dm)
-                except Exception:
+                except (TypeError, ValueError):
                     dm_f = float(s.get("dca_multiplier", DEFAULT_SETTINGS.get("dca_multiplier", 2.0)) or 2.0)
                 if dm_f < 0.0:
                     dm_f = 0.0
@@ -247,7 +251,7 @@ class SettingsDialog:
                 for tok in raw_dca:
                     try:
                         dca_levels.append(float(tok))
-                    except Exception:
+                    except (TypeError, ValueError):
                         pass
                 if not dca_levels:
                     dca_levels = list(DEFAULT_SETTINGS.get("dca_levels", []))
@@ -256,7 +260,7 @@ class SettingsDialog:
                 md = (max_dca_var.get() or "").strip()
                 try:
                     md_i = int(float(md))
-                except Exception:
+                except (TypeError, ValueError):
                     md_i = int(s.get("max_dca_buys_per_24h", DEFAULT_SETTINGS.get("max_dca_buys_per_24h", 2)) or 2)
                 if md_i < 0:
                     md_i = 0
@@ -264,7 +268,7 @@ class SettingsDialog:
 
                 try:
                     pm0 = float((pm_no_dca_var.get() or "").strip().replace("%", "") or 0.0)
-                except Exception:
+                except (TypeError, ValueError):
                     pm0 = float(s.get("pm_start_pct_no_dca", DEFAULT_SETTINGS.get("pm_start_pct_no_dca", 5.0)) or 5.0)
                 if pm0 < 0.0:
                     pm0 = 0.0
@@ -272,7 +276,7 @@ class SettingsDialog:
 
                 try:
                     pm1 = float((pm_with_dca_var.get() or "").strip().replace("%", "") or 0.0)
-                except Exception:
+                except (TypeError, ValueError):
                     pm1 = float(s.get("pm_start_pct_with_dca", DEFAULT_SETTINGS.get("pm_start_pct_with_dca", 2.5)) or 2.5)
                 if pm1 < 0.0:
                     pm1 = 0.0
@@ -280,7 +284,7 @@ class SettingsDialog:
 
                 try:
                     tg = float((trailing_gap_var.get() or "").strip().replace("%", "") or 0.0)
-                except Exception:
+                except (TypeError, ValueError):
                     tg = float(s.get("trailing_gap_pct", DEFAULT_SETTINGS.get("trailing_gap_pct", 0.5)) or 0.5)
                 if tg < 0.0:
                     tg = 0.0
@@ -314,8 +318,8 @@ class SettingsDialog:
                         dst_trainer_path = os.path.join(coin_dir, trainer_name)
                         if (not os.path.isfile(dst_trainer_path)) and os.path.isfile(src_trainer_path):
                             shutil.copy2(src_trainer_path, dst_trainer_path)
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logger.warning("Failed to create coin folder: %s", exc)
 
                 if self._on_save:
                     self._on_save(s, prev_coins)
@@ -342,12 +346,12 @@ class SettingsDialog:
             try:
                 with open(key_path, "r", encoding="utf-8") as f:
                     k = (f.read() or "").strip()
-            except Exception:
+            except OSError:
                 k = ""
             try:
                 with open(secret_path, "r", encoding="utf-8") as f:
                     s = (f.read() or "").strip()
-            except Exception:
+            except OSError:
                 s = ""
             return k, s
 
@@ -429,7 +433,7 @@ class SettingsDialog:
 
         try:
             from binance.client import Client as BinanceClient  # type: ignore[import-untyped]
-        except Exception:
+        except ImportError:
             messagebox.showerror(
                 "Missing dependency",
                 "The 'python-binance' package is required for Binance API setup.\n\n"
@@ -478,15 +482,15 @@ class SettingsDialog:
                     wiz_scroll.grid_remove()
                     try:
                         c.yview_moveto(0)
-                    except Exception:
+                    except tk.TclError:
                         pass
-            except Exception:
-                pass
+            except tk.TclError as exc:
+                logger.debug("Scrollbar update error: %s", exc)
 
         def _on_wiz_canvas_configure(e: Any) -> None:
             try:
                 wiz_canvas.itemconfigure(wiz_window, width=int(e.width))
-            except Exception:
+            except tk.TclError:
                 pass
             _update_wiz_scrollbars()
 
@@ -497,7 +501,7 @@ class SettingsDialog:
             try:
                 if wiz_scroll.winfo_ismapped():
                     wiz_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-            except Exception:
+            except tk.TclError:
                 pass
 
         wiz_canvas.bind("<Enter>", lambda _e: wiz_canvas.focus_set(), add="+")
@@ -624,8 +628,8 @@ class SettingsDialog:
                     shutil.copy2(key_path, f"{key_path}.bak_{ts}")
                 if os.path.isfile(secret_path):
                     shutil.copy2(secret_path, f"{secret_path}.bak_{ts}")
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("Failed to backup credential files: %s", exc)
 
             try:
                 with open(key_path, "w", encoding="utf-8") as f:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 import queue
 import shutil
@@ -15,6 +16,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from powertrader.hub.utils import safe_read_json
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -90,8 +93,8 @@ class ProcessManager:
                     time.sleep(0.05)
                     continue
                 q.put(f"{prefix}{line.rstrip()}")
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Reader thread I/O error: %s", exc)
         finally:
             q.put(f"{prefix}[process exited]")
 
@@ -125,8 +128,9 @@ class ProcessManager:
                     target=self._reader_thread, args=(p.proc, log_q, prefix), daemon=True
                 )
                 t.start()
-        except Exception as e:
-            self._show_error("Failed to start", f"{p.name} failed to start:\n{e}")
+        except OSError as exc:
+            logger.error("Failed to start %s: %s", p.name, exc)
+            self._show_error("Failed to start", f"{p.name} failed to start:\n{exc}")
 
     @staticmethod
     def _stop_process(p: ProcInfo) -> None:
@@ -134,8 +138,8 @@ class ProcessManager:
             return
         try:
             p.proc.terminate()
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to terminate %s: %s", p.name, exc)
 
     # ---- neural / trader ----
 
@@ -143,8 +147,8 @@ class ProcessManager:
         try:
             with open(self.runner_ready_path, "w", encoding="utf-8") as f:
                 json.dump({"timestamp": time.time(), "ready": False, "stage": "starting"}, f)
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to write runner_ready: %s", exc)
         self._start_process(self.proc_neural, log_q=self.runner_log_q, prefix="[RUNNER] ")
 
     def start_trader(self) -> None:
@@ -191,8 +195,8 @@ class ProcessManager:
         try:
             with open(self.runner_ready_path, "w", encoding="utf-8") as f:
                 json.dump({"timestamp": time.time(), "ready": False, "stage": "stopped"}, f)
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to write runner_ready on stop: %s", exc)
 
     # ---- runner readiness gate ----
 
@@ -203,8 +207,8 @@ class ProcessManager:
                     data = json.load(f)
                 if isinstance(data, dict):
                     return data
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            logger.debug("read_runner_ready failed: %s", exc)
         return {"ready": False}
 
     def _poll_runner_ready_then_start_trader(
@@ -226,8 +230,8 @@ class ProcessManager:
         if after_cb:
             try:
                 after_cb(250, lambda: self._poll_runner_ready_then_start_trader(after_cb))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Polling schedule failed: %s", exc)
 
     # ---- training ----
 
@@ -243,7 +247,7 @@ class ProcessManager:
                 state = str(st.get("state", "")).upper()
                 if state in ("TRAINING", "INTERRUPTED"):
                     return False
-        except Exception:
+        except (OSError, ValueError):
             pass
 
         stamp_path = os.path.join(folder, "trainer_last_training_time.txt")
@@ -256,7 +260,8 @@ class ProcessManager:
             if ts <= 0:
                 return False
             return (time.time() - ts) <= (14 * 24 * 60 * 60)
-        except Exception:
+        except (OSError, ValueError) as exc:
+            logger.debug("coin_is_trained(%s) check failed: %s", coin, exc)
             return False
 
     def running_trainers(self) -> List[str]:
@@ -265,7 +270,7 @@ class ProcessManager:
             try:
                 if lp.info.proc and lp.info.proc.poll() is None:
                     running.append(c)
-            except Exception:
+            except OSError:
                 pass
 
         for c in self.coins:
@@ -282,11 +287,11 @@ class ProcessManager:
                         if os.path.isfile(stamp_path) and os.path.isfile(status_path):
                             if os.path.getmtime(stamp_path) >= os.path.getmtime(status_path):
                                 continue
-                    except Exception:
+                    except OSError:
                         pass
                     running.append(coin)
-            except Exception:
-                pass
+            except (OSError, ValueError) as exc:
+                logger.debug("running_trainers check for %s failed: %s", c, exc)
 
         out: List[str] = []
         seen: set = set()
@@ -304,7 +309,7 @@ class ProcessManager:
             return False
         try:
             return os.path.isfile(os.path.join(folder, "trainer_checkpoint.json"))
-        except Exception:
+        except OSError:
             return False
 
     def training_status_map(self) -> Dict[str, str]:
@@ -347,8 +352,8 @@ class ProcessManager:
                 dst_trainer_path = os.path.join(coin_cwd, trainer_name)
                 if os.path.isfile(src_trainer_path):
                     shutil.copy2(src_trainer_path, dst_trainer_path)
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.warning("Failed to copy trainer for %s: %s", coin, exc)
 
         trainer_path = os.path.join(coin_cwd, trainer_name)
         if not os.path.isfile(trainer_path):
@@ -377,20 +382,20 @@ class ProcessManager:
                         try:
                             os.remove(fp)
                             deleted += 1
-                        except Exception:
-                            pass
+                        except OSError as exc:
+                            logger.debug("Failed to remove %s: %s", fp, exc)
                 if deleted and on_status:
                     on_status(f"Deleted {deleted} training file(s) for {coin} (force retrain)")
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.warning("Force retrain cleanup failed for %s: %s", coin, exc)
         else:
             for fname in ["killer.txt", "trainer_status.json"]:
                 try:
                     fp = os.path.join(coin_cwd, fname)
                     if os.path.isfile(fp):
                         os.remove(fp)
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logger.debug("Failed to remove %s: %s", fp, exc)
 
         q: queue.Queue[str] = queue.Queue()
         info = ProcInfo(name=f"Trainer-{coin}", path=trainer_path)
@@ -413,8 +418,9 @@ class ProcessManager:
             )
             t.start()
             self.trainers[coin] = LogProc(info=info, log_q=q, thread=t, is_trainer=True, coin=coin)
-        except Exception as e:
-            self._show_error("Failed to start", f"Trainer for {coin} failed to start:\n{e}")
+        except OSError as exc:
+            logger.error("Failed to start trainer for %s: %s", coin, exc)
+            self._show_error("Failed to start", f"Trainer for {coin} failed to start:\n{exc}")
 
     def stop_trainer_for_coin(self, coin: str) -> None:
         coin = coin.upper().strip()
@@ -423,5 +429,5 @@ class ProcessManager:
             return
         try:
             lp.info.proc.terminate()
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to terminate trainer for %s: %s", coin, exc)

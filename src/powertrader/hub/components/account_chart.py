@@ -15,8 +15,12 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
+import logging
+
 from powertrader.hub.theme import DARK_BG, DARK_BORDER, DARK_FG, DARK_PANEL
 from powertrader.hub.utils import fmt_money, read_trade_history_jsonl
+
+logger = logging.getLogger(__name__)
 
 
 class AccountValueChart(ttk.Frame):
@@ -71,11 +75,11 @@ class AccountValueChart(ttk.Frame):
                 if self._resize_after_id:
                     try:
                         self.after_cancel(self._resize_after_id)
-                    except Exception:
+                    except (ValueError, tk.TclError):
                         pass
                 self._resize_after_id = self.after_idle(self.canvas.draw_idle)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Account chart configure error: %s", exc)
 
         canvas_w.bind("<Configure>", _on_canvas_configure, add="+")
 
@@ -87,20 +91,20 @@ class AccountValueChart(ttk.Frame):
             for spine in self.ax.spines.values():
                 spine.set_color(DARK_BORDER)
             self.ax.grid(True, color=DARK_BORDER, linewidth=0.6, alpha=0.35)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to apply dark chart style: %s", exc)
 
     def refresh(self) -> None:
         path = self.history_path
 
         try:
             m_hist = os.path.getmtime(path)
-        except Exception:
+        except OSError:
             m_hist = None
 
         try:
             m_trades = os.path.getmtime(self.trade_history_path) if self.trade_history_path else None
-        except Exception:
+        except OSError:
             m_trades = None
 
         candidates = [m for m in (m_hist, m_trades) if m is not None]
@@ -129,9 +133,10 @@ class AccountValueChart(ttk.Frame):
                         if (not math.isfinite(tsf)) or (not math.isfinite(vf)) or (vf <= 0.0):
                             continue
                         points.append((tsf, vf))
-                    except Exception:
+                    except (json.JSONDecodeError, TypeError, ValueError):
                         continue
-        except Exception:
+        except OSError as exc:
+            logger.debug("Failed to read account history: %s", exc)
             points = []
 
         if points:
@@ -183,7 +188,7 @@ class AccountValueChart(ttk.Frame):
             self.ax.patches.clear()
             self.ax.collections.clear()
             self.ax.texts.clear()
-        except Exception:
+        except AttributeError:
             self.ax.cla()
             self._apply_dark_chart_style()
 
@@ -225,7 +230,7 @@ class AccountValueChart(ttk.Frame):
                     tts = tr.get("ts")
                     try:
                         tts = float(tts)
-                    except Exception:
+                    except (TypeError, ValueError):
                         continue
                     if tts < t_min or tts > t_max:
                         continue
@@ -246,13 +251,13 @@ class AccountValueChart(ttk.Frame):
                         label, (x, y), textcoords="offset points", xytext=(0, 10),
                         ha="center", fontsize=8, color=DARK_FG, zorder=7,
                     )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to draw trade markers on account chart: %s", exc)
 
         try:
             self.ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _pos: f"${y:,.2f}"))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to set y formatter: %s", exc)
 
         n = len(points)
         want = 5
@@ -278,21 +283,21 @@ class AccountValueChart(ttk.Frame):
             self.ax.set_xticks(tick_x)
             self.ax.set_xticklabels(tick_lbl)
             self.ax.tick_params(axis="x", labelsize=8)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to set account chart x labels: %s", exc)
 
         self.ax.set_xlim(-0.5, (len(points) - 0.5) + 0.6)
 
         try:
             self.ax.set_title(f"Account Value ({fmt_money(ys[-1])})", color=DARK_FG)
-        except Exception:
+        except (IndexError, TypeError, ValueError):
             self.ax.set_title("Account Value", color=DARK_FG)
 
         try:
             self.last_update_label.config(
                 text=f"Last: {time.strftime('%H:%M:%S', time.localtime(points[-1][0]))}"
             )
-        except Exception:
+        except (IndexError, TypeError, ValueError, OSError):
             self.last_update_label.config(text="Last: N/A")
 
         self.canvas.draw_idle()

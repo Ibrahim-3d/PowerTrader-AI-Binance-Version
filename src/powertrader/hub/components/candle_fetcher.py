@@ -6,6 +6,11 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class CandleFetcher:
     """Uses kucoin-python if available; otherwise falls back to KuCoin REST via requests."""
 
@@ -15,7 +20,12 @@ class CandleFetcher:
         try:
             from kucoin.client import Market  # type: ignore[import-untyped]
             self._market = Market(url="https://api.kucoin.com")
-        except Exception:
+        except ImportError:
+            logger.debug("kucoin package not installed, using REST fallback")
+            self._mode = "rest"
+            self._market = None
+        except Exception as exc:
+            logger.debug("KuCoin client init failed: %s", exc)
             self._mode = "rest"
             self._market = None
 
@@ -51,7 +61,7 @@ class CandleFetcher:
             try:
                 try:
                     raw = self._market.get_kline(pair, timeframe, startAt=start_at, endAt=end_at)  # type: ignore[attr-defined]
-                except Exception:
+                except (TypeError, KeyError):
                     raw = self._market.get_kline(pair, timeframe)  # type: ignore[attr-defined]
 
                 candles: List[dict] = []
@@ -65,7 +75,8 @@ class CandleFetcher:
 
                 self._cache[cache_key] = (now, candles)
                 return candles
-            except Exception:
+            except (OSError, ConnectionError, ValueError, TypeError) as exc:
+                logger.debug("KuCoin client fetch failed for %s/%s: %s", pair, timeframe, exc)
                 return []
 
         # REST fallback
@@ -86,5 +97,6 @@ class CandleFetcher:
 
             self._cache[cache_key] = (now, candles)
             return candles
-        except Exception:
+        except (OSError, ConnectionError, ValueError, TypeError) as exc:
+            logger.debug("REST candle fetch failed for %s/%s: %s", pair, timeframe, exc)
             return []
