@@ -22,7 +22,27 @@ python pt_thinker.py                  # Run signal generator
 python pt_trader.py                   # Run trade executor
 ```
 
-There are no automated tests or linting configured.
+## Testing & Linting
+
+```bash
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run unit tests
+pytest
+
+# Run with coverage report
+pytest --cov=powertrader --cov-report=term-missing
+
+# Linting
+ruff check src/ tests/
+ruff format --check src/ tests/
+
+# Type checking
+mypy src/
+```
+
+Tests live in `tests/` and cover the `src/powertrader/core/` module (config, constants, credentials, logging, paths, storage, symbols). Test directories for trader, thinker, and trainer are scaffolded. CI runs automatically on every pull request via GitHub Actions.
 
 ## Architecture
 
@@ -79,6 +99,12 @@ All Python, no Node.js runtime needed (package-lock.json is empty):
 - `colorama` — colored terminal output
 - `python-binance` — Binance API client (HMAC-SHA256 auth handled automatically)
 - `kucoin-python` — KuCoin market data client
+
+**Dev dependencies** (in `requirements-dev.txt`):
+- `pytest` / `pytest-cov` — testing & coverage
+- `ruff` — linting & formatting
+- `mypy` — type checking
+- `pre-commit` — git hooks
 
 ## Design Philosophy
 
