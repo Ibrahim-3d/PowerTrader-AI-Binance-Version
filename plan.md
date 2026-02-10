@@ -324,13 +324,13 @@ PriceLevel: TypeAlias = float
 ```
 
 **Phase 2 Deliverables:**
-- [ ] `models/candle.py`
-- [ ] `models/signal.py`
-- [ ] `models/position.py`
-- [ ] `models/trade.py`
-- [ ] `models/memory.py`
-- [ ] `models/types.py`
-- [ ] Unit tests for all model validation and properties
+- [x] `models/candle.py`
+- [x] `models/signal.py`
+- [x] `models/position.py`
+- [x] `models/trade.py`
+- [x] `models/memory.py`
+- [x] `models/types.py`
+- [x] Unit tests for all model validation and properties (138 tests)
 
 ---
 
