@@ -67,11 +67,11 @@ class PowerTraderHub(tk.Tk):
 
         self._paned_clamp_after_ids: Dict[str, str] = {}
 
+        self.project_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+
         self._apply_forced_dark_mode()
 
         self.settings = self._load_settings()
-
-        self.project_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
         main_dir = str(self.settings.get("main_neural_dir") or "").strip()
         if main_dir and not os.path.isabs(main_dir):
