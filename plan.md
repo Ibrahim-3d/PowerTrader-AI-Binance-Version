@@ -605,11 +605,11 @@ def main():
 ```
 
 **Phase 5 Deliverables:**
-- [ ] `trainer/runner.py`
-- [ ] `thinker/runner.py`
-- [ ] `trader/runner.py`
-- [ ] `scripts/run_trainer.py`, `run_thinker.py`, `run_trader.py`
-- [ ] Integration tests (runners with mock clients)
+- [x] `trainer/runner.py` — orchestrates training across coins/timeframes with checkpoint resume and stop signal
+- [x] `thinker/runner.py` — continuous signal generation with hot-reload of coin list
+- [x] `trader/runner.py` — trade execution with position sync, entry/DCA/exit management
+- [x] `scripts/run_trainer.py`, `run_thinker.py`, `run_trader.py` — entry points with dependency wiring
+- [x] Integration tests (runners with mock clients) — 41 tests covering all three runners
 - [ ] Verify identical behavior to original scripts
 
 ---
@@ -805,10 +805,10 @@ tests/
 │   └── trainer/
 │       └── test_memory.py          # Memory I/O, checkpoints, distance, progress   ✅ done (32 tests) — split in Phase 4
 ├── integration/
-│   ├── test_trainer_runner.py      # Full training with mock market                 ☐ Phase 5
-│   ├── test_thinker_runner.py      # Signal gen with mock data                      ☐ Phase 5
-│   ├── test_trader_runner.py       # Trade execution with paper client              ☐ Phase 5
-│   └── test_file_ipc.py           # End-to-end file-based communication            ☐ Phase 5
+│   ├── test_trainer_runner.py      # Full training with mock market                 ✅ Phase 5
+│   ├── test_thinker_runner.py      # Signal gen with mock data                      ✅ Phase 5
+│   ├── test_trader_runner.py       # Trade execution with paper client              ✅ Phase 5
+│   └── test_file_ipc.py           # End-to-end file-based communication (in test_trader_runner.py) ✅ Phase 5
 └── conftest.py                     # Shared fixtures (mock clients, temp dirs)      ✅ done
 ```
 
