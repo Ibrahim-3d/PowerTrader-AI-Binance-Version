@@ -7,30 +7,26 @@ class, these tests should be migrated to test that class instead.
 
 from __future__ import annotations
 
-import json
-import os
 import time
 from pathlib import Path
-
-import pytest
-
 
 # =====================================================================
 # find_purple_area — pure function (no I/O, no state)
 # =====================================================================
+
 
 def find_purple_area(lines):
     """
     Copied from pt_thinker.py so we can test it without importing
     the module (which does network calls at import time).
     """
-    oranges = sorted([price for price, color in lines if color == 'orange'], reverse=True)
-    blues = sorted([price for price, color in lines if color == 'blue'])
+    oranges = sorted([price for price, color in lines if color == "orange"], reverse=True)
+    blues = sorted([price for price, color in lines if color == "blue"])
     if not oranges or not blues:
         return (None, None)
     purple_bottom = None
     purple_top = None
-    all_levels = sorted(set(oranges + blues + [float('-inf'), float('inf')]), reverse=True)
+    all_levels = sorted(set(oranges + blues + [float("-inf"), float("inf")]), reverse=True)
     for i in range(len(all_levels) - 1):
         top = all_levels[i]
         bottom = all_levels[i + 1]
@@ -53,18 +49,20 @@ class TestFindPurpleArea:
         assert find_purple_area([]) == (None, None)
 
     def test_only_oranges(self):
-        lines = [(100.0, 'orange'), (105.0, 'orange')]
+        lines = [(100.0, "orange"), (105.0, "orange")]
         assert find_purple_area(lines) == (None, None)
 
     def test_only_blues(self):
-        lines = [(95.0, 'blue'), (90.0, 'blue')]
+        lines = [(95.0, "blue"), (90.0, "blue")]
         assert find_purple_area(lines) == (None, None)
 
     def test_no_overlap(self):
         """Blues all below oranges — no purple area."""
         lines = [
-            (80.0, 'blue'), (85.0, 'blue'),
-            (100.0, 'orange'), (105.0, 'orange'),
+            (80.0, "blue"),
+            (85.0, "blue"),
+            (100.0, "orange"),
+            (105.0, "orange"),
         ]
         result = find_purple_area(lines)
         # When blues are below oranges, there should be a purple zone
@@ -75,8 +73,8 @@ class TestFindPurpleArea:
     def test_clear_overlap(self):
         """Orange at 95, blue at 105 — they overlap in between."""
         lines = [
-            (95.0, 'orange'),
-            (105.0, 'blue'),
+            (95.0, "orange"),
+            (105.0, "blue"),
         ]
         bottom, top = find_purple_area(lines)
         # With orange at 95 and blue at 105, purple area exists
@@ -86,8 +84,10 @@ class TestFindPurpleArea:
     def test_multiple_levels_overlap(self):
         """Multiple lines creating a purple zone."""
         lines = [
-            (90.0, 'orange'), (95.0, 'orange'),
-            (92.0, 'blue'), (100.0, 'blue'),
+            (90.0, "orange"),
+            (95.0, "orange"),
+            (92.0, "blue"),
+            (100.0, "blue"),
         ]
         bottom, top = find_purple_area(lines)
         if bottom is not None:
@@ -98,10 +98,11 @@ class TestFindPurpleArea:
 # _is_printing_real_predictions — pure function
 # =====================================================================
 
+
 def _is_printing_real_predictions(messages):
     """Copied from pt_thinker.py for isolated testing."""
     try:
-        for m in (messages or []):
+        for m in messages or []:
             if not isinstance(m, str):
                 continue
             if m.startswith("WITHIN") or m.startswith("LONG") or m.startswith("SHORT"):
@@ -142,6 +143,7 @@ class TestIsPrintingRealPredictions:
 # =====================================================================
 # Signal level counting logic
 # =====================================================================
+
 
 class TestSignalLevelCounting:
     """
@@ -225,6 +227,7 @@ class TestSignalLevelCounting:
 # Bound price file parsing (read low_bound_prices.html)
 # =====================================================================
 
+
 class TestBoundPriceParsing:
     """Tests for reading/parsing the bound price files."""
 
@@ -289,6 +292,7 @@ class TestBoundPriceParsing:
 # Training freshness gate
 # =====================================================================
 
+
 class TestCoinIsTrained:
     """_coin_is_trained — file-based training freshness check."""
 
@@ -312,7 +316,9 @@ class TestCoinIsTrained:
         assert self._coin_is_trained(tmp_path) is False
 
     def test_fresh_training(self, tmp_path):
-        (tmp_path / "trainer_last_training_time.txt").write_text(str(time.time()), encoding="utf-8")
+        (tmp_path / "trainer_last_training_time.txt").write_text(
+            str(time.time()), encoding="utf-8"
+        )
         assert self._coin_is_trained(tmp_path) is True
 
     def test_stale_training(self, tmp_path):

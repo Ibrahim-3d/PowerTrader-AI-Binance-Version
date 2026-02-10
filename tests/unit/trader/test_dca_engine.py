@@ -12,19 +12,16 @@ from __future__ import annotations
 
 import importlib
 import json
-import os
 import sys
 import time
-from pathlib import Path
-from types import ModuleType
 from unittest import mock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers to import pt_trader safely (no real Binance connection)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _isolate_trader_globals(tmp_path, monkeypatch):
@@ -60,7 +57,9 @@ def _isolate_trader_globals(tmp_path, monkeypatch):
 def _make_mock_client():
     """Return a MagicMock that satisfies CryptoAPITrading.__init__."""
     client = mock.MagicMock()
-    client.get_account.return_value = {"balances": [{"asset": "USDT", "free": "1000.0", "locked": "0"}]}
+    client.get_account.return_value = {
+        "balances": [{"asset": "USDT", "free": "1000.0", "locked": "0"}]
+    }
     client.get_all_orders.return_value = []
     client.get_symbol_info.return_value = {
         "filters": [{"filterType": "LOT_SIZE", "stepSize": "0.001", "minQty": "0.001"}]
@@ -87,6 +86,7 @@ def _import_trader(monkeypatch):
 # Static / pure utility tests (no Binance connection required)
 # =====================================================================
 
+
 class TestRoundStepSize:
     """CryptoAPITrading._round_step_size — pure math, no API."""
 
@@ -95,6 +95,7 @@ class TestRoundStepSize:
         step = "0.001"
         # 1.23456789 // 0.001 = 1234, * 0.001 = 1.234
         from decimal import Decimal
+
         d_qty = Decimal(str(result))
         d_step = Decimal(step)
         expected = float((d_qty // d_step) * d_step)
@@ -102,16 +103,19 @@ class TestRoundStepSize:
 
     def test_exact_multiple(self):
         from decimal import Decimal
+
         result = float((Decimal("5.0") // Decimal("0.01")) * Decimal("0.01"))
         assert result == pytest.approx(5.0)
 
     def test_tiny_quantity(self):
         from decimal import Decimal
+
         result = float((Decimal("0.000009") // Decimal("0.00001")) * Decimal("0.00001"))
         assert result == pytest.approx(0.0)
 
     def test_large_quantity(self):
         from decimal import Decimal
+
         result = float((Decimal("99999.99") // Decimal("0.01")) * Decimal("0.01"))
         assert result == pytest.approx(99999.99)
 
@@ -121,6 +125,7 @@ class TestFmtPrice:
 
     def _fmt(self, price):
         import math
+
         try:
             p = float(price)
         except Exception:
@@ -164,9 +169,12 @@ class TestAdaptBinanceOrder:
             return raw
         status = str(raw.get("status", "")).upper()
         state_map = {
-            "NEW": "pending", "PARTIALLY_FILLED": "pending",
-            "FILLED": "filled", "CANCELED": "canceled",
-            "REJECTED": "rejected", "EXPIRED": "expired",
+            "NEW": "pending",
+            "PARTIALLY_FILLED": "pending",
+            "FILLED": "filled",
+            "CANCELED": "canceled",
+            "REJECTED": "rejected",
+            "EXPIRED": "expired",
             "EXPIRED_IN_MATCH": "expired",
         }
         state = state_map.get(status, status.lower())
@@ -199,12 +207,24 @@ class TestAdaptBinanceOrder:
         assert result["filled_asset_quantity"] == pytest.approx(0.5)
 
     def test_pending_order(self):
-        raw = {"orderId": "1", "status": "NEW", "side": "SELL", "executedQty": "0", "cummulativeQuoteQty": "0"}
+        raw = {
+            "orderId": "1",
+            "status": "NEW",
+            "side": "SELL",
+            "executedQty": "0",
+            "cummulativeQuoteQty": "0",
+        }
         result = self._adapt(raw)
         assert result["state"] == "pending"
 
     def test_canceled_order(self):
-        raw = {"orderId": "2", "status": "CANCELED", "side": "BUY", "executedQty": "0", "cummulativeQuoteQty": "0"}
+        raw = {
+            "orderId": "2",
+            "status": "CANCELED",
+            "side": "BUY",
+            "executedQty": "0",
+            "cummulativeQuoteQty": "0",
+        }
         result = self._adapt(raw)
         assert result["state"] == "canceled"
 
@@ -221,16 +241,17 @@ class TestAdaptBinanceOrder:
 # DCA rate-limiting tests (instance-level, needs mocked Binance)
 # =====================================================================
 
+
 class TestDCAWindowCount:
     """_dca_window_count — rolling 24h DCA rate limit."""
 
     def test_empty_window(self, monkeypatch):
-        mod, client = _import_trader(monkeypatch)
+        mod, _client = _import_trader(monkeypatch)
         bot = mod.CryptoAPITrading()
         assert bot._dca_window_count("BTC") == 0
 
     def test_counts_recent_buys(self, monkeypatch):
-        mod, client = _import_trader(monkeypatch)
+        mod, _client = _import_trader(monkeypatch)
         bot = mod.CryptoAPITrading()
         now = time.time()
         bot._dca_buy_ts["BTC"] = [now - 100, now - 200]
@@ -238,7 +259,7 @@ class TestDCAWindowCount:
         assert bot._dca_window_count("BTC", now_ts=now) == 2
 
     def test_excludes_buys_before_last_sell(self, monkeypatch):
-        mod, client = _import_trader(monkeypatch)
+        mod, _client = _import_trader(monkeypatch)
         bot = mod.CryptoAPITrading()
         now = time.time()
         bot._dca_buy_ts["BTC"] = [now - 1000, now - 100]
@@ -246,7 +267,7 @@ class TestDCAWindowCount:
         assert bot._dca_window_count("BTC", now_ts=now) == 1
 
     def test_excludes_buys_outside_24h(self, monkeypatch):
-        mod, client = _import_trader(monkeypatch)
+        mod, _client = _import_trader(monkeypatch)
         bot = mod.CryptoAPITrading()
         now = time.time()
         bot._dca_buy_ts["BTC"] = [now - 90000, now - 100]  # 90000s = 25h ago
@@ -254,7 +275,7 @@ class TestDCAWindowCount:
         assert bot._dca_window_count("BTC", now_ts=now) == 1
 
     def test_case_insensitive(self, monkeypatch):
-        mod, client = _import_trader(monkeypatch)
+        mod, _client = _import_trader(monkeypatch)
         bot = mod.CryptoAPITrading()
         now = time.time()
         bot._dca_buy_ts["BTC"] = [now - 100]
@@ -265,14 +286,14 @@ class TestNoteDCABuy:
     """_note_dca_buy — records a DCA buy timestamp."""
 
     def test_records_timestamp(self, monkeypatch):
-        mod, client = _import_trader(monkeypatch)
+        mod, _client = _import_trader(monkeypatch)
         bot = mod.CryptoAPITrading()
         ts = 1700000000.0
         bot._note_dca_buy("ETH", ts=ts)
         assert ts in bot._dca_buy_ts.get("ETH", [])
 
     def test_multiple_records(self, monkeypatch):
-        mod, client = _import_trader(monkeypatch)
+        mod, _client = _import_trader(monkeypatch)
         bot = mod.CryptoAPITrading()
         bot._note_dca_buy("BTC", ts=1000.0)
         bot._note_dca_buy("BTC", ts=2000.0)
@@ -283,7 +304,7 @@ class TestResetDCAWindow:
     """_reset_dca_window_for_trade — clears DCA state on sell."""
 
     def test_reset_clears_buy_list(self, monkeypatch):
-        mod, client = _import_trader(monkeypatch)
+        mod, _client = _import_trader(monkeypatch)
         bot = mod.CryptoAPITrading()
         bot._dca_buy_ts["BTC"] = [1000.0, 2000.0]
         bot._reset_dca_window_for_trade("BTC", sold=True, ts=3000.0)
@@ -291,7 +312,7 @@ class TestResetDCAWindow:
         assert bot._dca_last_sell_ts["BTC"] == 3000.0
 
     def test_reset_without_sell(self, monkeypatch):
-        mod, client = _import_trader(monkeypatch)
+        mod, _client = _import_trader(monkeypatch)
         bot = mod.CryptoAPITrading()
         bot._dca_buy_ts["BTC"] = [1000.0]
         bot._reset_dca_window_for_trade("BTC", sold=False)
@@ -303,6 +324,7 @@ class TestResetDCAWindow:
 # =====================================================================
 # DCA trigger logic tests
 # =====================================================================
+
 
 class TestDCATriggerLogic:
     """Tests for the DCA trigger conditions (hard % and neural)."""
@@ -329,7 +351,9 @@ class TestDCATriggerLogic:
         """After all levels exhausted, repeats -50%."""
         dca_levels = [-2.5, -5.0, -10.0, -20.0, -30.0, -40.0, -50.0]
         current_stage = 10  # beyond list
-        hard_level = dca_levels[current_stage] if current_stage < len(dca_levels) else dca_levels[-1]
+        hard_level = (
+            dca_levels[current_stage] if current_stage < len(dca_levels) else dca_levels[-1]
+        )
         assert hard_level == -50.0
 
     def test_neural_dca_trigger(self):
@@ -370,20 +394,24 @@ class TestDCATriggerLogic:
 # Entry condition tests
 # =====================================================================
 
+
 class TestEntryConditions:
     """Trade entry: long >= start_level AND short == 0."""
 
-    @pytest.mark.parametrize("buy_count,sell_count,start_level,expected", [
-        (3, 0, 3, True),    # minimum qualifying signal
-        (5, 0, 3, True),    # strong long, no short
-        (7, 0, 3, True),    # max long
-        (2, 0, 3, False),   # long below start level
-        (3, 1, 3, False),   # short > 0 blocks entry
-        (0, 0, 3, False),   # no signal
-        (3, 0, 5, False),   # start level raised to 5
-        (5, 0, 5, True),    # meets raised start level
-        (1, 0, 1, True),    # minimum possible start level
-    ])
+    @pytest.mark.parametrize(
+        "buy_count,sell_count,start_level,expected",
+        [
+            (3, 0, 3, True),  # minimum qualifying signal
+            (5, 0, 3, True),  # strong long, no short
+            (7, 0, 3, True),  # max long
+            (2, 0, 3, False),  # long below start level
+            (3, 1, 3, False),  # short > 0 blocks entry
+            (0, 0, 3, False),  # no signal
+            (3, 0, 5, False),  # start level raised to 5
+            (5, 0, 5, True),  # meets raised start level
+            (1, 0, 1, True),  # minimum possible start level
+        ],
+    )
     def test_entry_gate(self, buy_count, sell_count, start_level, expected):
         result = buy_count >= start_level and sell_count == 0
         assert result is expected
@@ -392,6 +420,7 @@ class TestEntryConditions:
 # =====================================================================
 # Trailing profit margin logic tests
 # =====================================================================
+
 
 class TestTrailingProfitMargin:
     """Tests for the trailing PM exit logic (lines ~1855-1946 in pt_trader.py)."""
@@ -526,6 +555,7 @@ class TestTrailingProfitMargin:
 # =====================================================================
 # Cost basis calculation logic
 # =====================================================================
+
 
 class TestCostBasisLogic:
     """Cost basis = weighted average price of remaining buy orders."""
