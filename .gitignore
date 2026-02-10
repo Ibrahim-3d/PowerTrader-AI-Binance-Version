@@ -55,6 +55,21 @@ venv/
 env/
 .venv/
 
+# --- Logs (generated at runtime) ---
+logs/
+
+# --- Coverage & test artifacts ---
+.coverage
+htmlcov/
+.pytest_cache/
+
+# --- mypy cache ---
+.mypy_cache/
+
+# --- Trainer checkpoints/progress (runtime) ---
+trainer_checkpoint.json
+trainer_progress.json
+
 # --- Node (empty package-lock.json in repo) ---
 node_modules/
 package-lock.json
