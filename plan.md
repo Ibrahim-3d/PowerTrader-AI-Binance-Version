@@ -760,44 +760,66 @@ class HealthMonitor:
 
 **Goal:** Build a test suite that gives confidence to refactor and extend.
 
+### 8.0 Current State (Pre-Phase 4)
+
+> **Early tests written against the monolithic scripts.** Before Phase 4 extracts
+> standalone engine classes, we have tests that exercise the critical money-path
+> logic by copying/inlining the pure functions from `pt_trader.py`, `pt_thinker.py`,
+> and `pt_trainer.py`. These act as behavioral specifications: when Phase 4 creates
+> `DCAEngine`, `TrailingProfitEngine`, `EntryEngine`, `SignalEngine`, and
+> `TrainingEngine`, the corresponding tests should be **migrated** to import from
+> the new modules instead of inlining the logic.
+>
+> **Tests to migrate in Phase 4:**
+> - `tests/unit/trader/test_dca_engine.py` → import from `trader/dca_engine.py`
+> - `tests/unit/trader/test_dca_engine.py::TestTrailingProfitMargin` → move to `test_trailing_engine.py`, import from `trader/trailing_engine.py`
+> - `tests/unit/trader/test_dca_engine.py::TestEntryConditions` → move to `test_entry_engine.py`, import from `trader/entry_engine.py`
+> - `tests/unit/trader/test_dca_engine.py::TestCostBasisLogic` → move to `test_cost_basis.py`
+> - `tests/unit/thinker/test_signal_engine.py` → import from `thinker/signal_engine.py`
+> - `tests/unit/trainer/test_memory.py` → import from `trainer/training_engine.py`
+>
+> **Already completed (221 tests passing):**
+> - [x] `conftest.py` with shared fixtures (mock clients, temp dirs)
+> - [x] Unit tests for all core modules (86 tests, ~92% coverage)
+> - [x] Unit tests for money-path logic against monolithic scripts (123 tests)
+> - [x] CI pipeline (GitHub Actions) running tests on every PR
+> - [x] Tests cover: DCA triggers, trailing PM, entry conditions, cost basis, signal levels, pattern matching, memory I/O, checkpoints
+
 ### 8.1 Test Strategy
 
 ```
 tests/
 ├── unit/
 │   ├── core/
-│   │   ├── test_config.py          # Config loading, validation, defaults
-│   │   ├── test_storage.py         # FileStore atomic writes, error handling
-│   │   ├── test_paths.py           # CoinPaths resolution
-│   │   ├── test_symbols.py         # Symbol conversion
-│   │   └── test_credentials.py     # Credential loading priority
+│   │   ├── test_config.py          # Config loading, validation, defaults          ✅ done (28 tests)
+│   │   ├── test_constants.py       # Timeframes, signals, defaults                 ✅ done (9 tests)
+│   │   ├── test_logging_setup.py   # Logger creation, idempotency                  ✅ done (5 tests)
+│   │   ├── test_storage.py         # FileStore atomic writes, error handling        ✅ done (16 tests)
+│   │   ├── test_paths.py           # CoinPaths resolution                          ✅ done (13 tests)
+│   │   ├── test_symbols.py         # Symbol conversion                             ✅ done (6 tests)
+│   │   └── test_credentials.py     # Credential loading priority                   ✅ done (9 tests)
 │   ├── trader/
-│   │   ├── test_dca_engine.py      # DCA stage transitions, rate limits
-│   │   ├── test_trailing_engine.py # Trailing activation, exit detection
-│   │   ├── test_entry_engine.py    # Entry conditions
-│   │   └── test_cost_basis.py      # Cost basis calculation
+│   │   └── test_dca_engine.py      # DCA, trailing PM, entry, cost basis           ✅ done (56 tests) — split in Phase 4
 │   ├── thinker/
-│   │   ├── test_signal_engine.py   # Pattern matching, level calculation
-│   │   └── test_bounds.py          # Bound sorting, spacing enforcement
+│   │   └── test_signal_engine.py   # Signals, bounds, purple area, training gate   ✅ done (35 tests) — split in Phase 4
 │   └── trainer/
-│       ├── test_memory.py          # Memory building, pattern extraction
-│       └── test_weights.py         # Weight adjustment logic
+│       └── test_memory.py          # Memory I/O, checkpoints, distance, progress   ✅ done (32 tests) — split in Phase 4
 ├── integration/
-│   ├── test_trainer_runner.py      # Full training with mock market
-│   ├── test_thinker_runner.py      # Signal gen with mock data
-│   ├── test_trader_runner.py       # Trade execution with paper client
-│   └── test_file_ipc.py           # End-to-end file-based communication
-└── conftest.py                     # Shared fixtures (mock clients, temp dirs)
+│   ├── test_trainer_runner.py      # Full training with mock market                 ☐ Phase 5
+│   ├── test_thinker_runner.py      # Signal gen with mock data                      ☐ Phase 5
+│   ├── test_trader_runner.py       # Trade execution with paper client              ☐ Phase 5
+│   └── test_file_ipc.py           # End-to-end file-based communication            ☐ Phase 5
+└── conftest.py                     # Shared fixtures (mock clients, temp dirs)      ✅ done
 ```
 
 ### 8.2 Priority Tests (Money Path)
 
-1. **DCA calculation correctness** — wrong DCA = real money lost
-2. **Trailing exit detection** — missed exit = missed profit
-3. **Entry conditions** — false entries = capital at risk
-4. **Cost basis calculation** — wrong PnL = bad decisions
-5. **Signal generation** — wrong signal = wrong trades
-6. **Config validation** — invalid config = unpredictable behavior
+1. **DCA calculation correctness** — wrong DCA = real money lost ✅
+2. **Trailing exit detection** — missed exit = missed profit ✅
+3. **Entry conditions** — false entries = capital at risk ✅
+4. **Cost basis calculation** — wrong PnL = bad decisions ✅
+5. **Signal generation** — wrong signal = wrong trades ✅
+6. **Config validation** — invalid config = unpredictable behavior ✅
 
 ### 8.3 Test Fixtures
 
@@ -825,12 +847,13 @@ def sample_memory():
 ```
 
 **Phase 8 Deliverables:**
-- [ ] `conftest.py` with mock clients and fixtures
-- [ ] Unit tests for all core modules
-- [ ] Unit tests for all business logic engines
-- [ ] Integration tests for runners
-- [ ] CI pipeline (GitHub Actions) running tests on every push
-- [ ] Coverage report > 80% on business logic
+- [x] `conftest.py` with mock clients and fixtures
+- [x] Unit tests for all core modules
+- [x] Unit tests for money-path business logic (against monolithic scripts)
+- [ ] Unit tests for all extracted business logic engines (Phase 4 migration)
+- [ ] Integration tests for runners (Phase 5)
+- [x] CI pipeline (GitHub Actions) running tests on every push
+- [ ] Coverage report > 80% on business logic (after Phase 4 extraction)
 
 ---
 
