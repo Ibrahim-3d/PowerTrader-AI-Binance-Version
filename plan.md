@@ -403,12 +403,12 @@ class PaperTradingClient(TradingClient):
 **Impact:** Enables development without real API keys. Enables backtesting. Reduces risk of bugs costing real money.
 
 **Phase 3 Deliverables:**
-- [ ] `core/market_client.py` — abstract + KuCoin implementation
-- [ ] `core/trading_client.py` — abstract + Binance implementation
-- [ ] `core/paper_client.py` — simulated trading
-- [ ] Rate limiting decorator/utility
-- [ ] Bounded retry utility
-- [ ] Unit tests with mock clients
+- [x] `core/market_client.py` — abstract + KuCoin implementation
+- [x] `core/trading_client.py` — abstract + Binance implementation
+- [x] `core/paper_client.py` — simulated trading
+- [x] Rate limiting decorator/utility (`core/retry.py`)
+- [x] Bounded retry utility (`core/retry.py`)
+- [x] Unit tests with mock clients (44 tests)
 
 ---
 
@@ -516,12 +516,12 @@ class TrainingEngine:
 ```
 
 **Phase 4 Deliverables:**
-- [ ] `thinker/signal_engine.py` — signal generation
-- [ ] `trader/dca_engine.py` — DCA logic
-- [ ] `trader/trailing_engine.py` — trailing profit exits
-- [ ] `trader/entry_engine.py` — trade entry logic
-- [ ] `trainer/training_engine.py` — training algorithm
-- [ ] Unit tests for ALL business logic (target: 90% coverage)
+- [x] `thinker/signal_engine.py` — signal generation
+- [x] `trader/dca_engine.py` — DCA logic
+- [x] `trader/trailing_engine.py` — trailing profit exits
+- [x] `trader/entry_engine.py` — trade entry logic
+- [x] `trainer/training_engine.py` — training algorithm
+- [x] Unit tests for ALL business logic (84 tests)
   - DCA stage transitions
   - Trailing line activation/deactivation
   - Signal level calculation from bounds
@@ -850,7 +850,7 @@ def sample_memory():
 - [x] `conftest.py` with mock clients and fixtures
 - [x] Unit tests for all core modules
 - [x] Unit tests for money-path business logic (against monolithic scripts)
-- [ ] Unit tests for all extracted business logic engines (Phase 4 migration)
+- [x] Unit tests for all extracted business logic engines (Phase 4 — 84 tests)
 - [ ] Integration tests for runners (Phase 5)
 - [x] CI pipeline (GitHub Actions) running tests on every push
 - [ ] Coverage report > 80% on business logic (after Phase 4 extraction)
