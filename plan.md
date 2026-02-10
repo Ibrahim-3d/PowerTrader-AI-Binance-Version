@@ -70,13 +70,13 @@ PowerTrader_AI/
 - Set up branch protection rules for `main`
 
 **Deliverables:**
-- [ ] `pyproject.toml` with all configs
-- [ ] `ruff.toml` / ruff config section
-- [ ] Empty `src/powertrader/` package structure
-- [ ] `tests/` directory with conftest
-- [ ] `requirements-dev.txt`
-- [ ] Pre-commit config
-- [ ] All tooling runs clean on empty package
+- [x] `pyproject.toml` with all configs
+- [x] `ruff.toml` / ruff config section
+- [x] Empty `src/powertrader/` package structure
+- [x] `tests/` directory with conftest
+- [x] `requirements-dev.txt`
+- [x] Pre-commit config
+- [x] All tooling runs clean on empty package
 
 ---
 
@@ -232,14 +232,14 @@ class BinanceCredentials:
 **Impact:** Supports env vars (CI/CD, Docker), OS keyring (desktop), and legacy files (backwards compat).
 
 **Phase 1 Deliverables:**
-- [ ] `core/constants.py` — all magic numbers extracted
-- [ ] `core/config.py` — validated TradingConfig dataclass
-- [ ] `core/storage.py` — atomic FileStore with logging
-- [ ] `core/paths.py` — CoinPaths resolver
-- [ ] `core/logging_setup.py` — structured rotating logs
-- [ ] `core/symbols.py` — symbol conversion
-- [ ] `core/credentials.py` — multi-source credential loading
-- [ ] Unit tests for all core modules (target: 95% coverage)
+- [x] `core/constants.py` — all magic numbers extracted
+- [x] `core/config.py` — validated TradingConfig dataclass
+- [x] `core/storage.py` — atomic FileStore with logging
+- [x] `core/paths.py` — CoinPaths resolver
+- [x] `core/logging_setup.py` — structured rotating logs
+- [x] `core/symbols.py` — symbol conversion
+- [x] `core/credentials.py` — multi-source credential loading
+- [x] Unit tests for all core modules (target: 95% coverage) — achieved 92%
 
 ---
 
