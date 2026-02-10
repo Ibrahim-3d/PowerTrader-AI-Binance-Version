@@ -12,16 +12,15 @@ pt_trainer.py (which does network calls and heavy init at import time).
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 
 import pytest
 
-
 # =====================================================================
 # Memory file format tests
 # =====================================================================
+
 
 class TestMemoryFileFormat:
     """
@@ -66,18 +65,21 @@ class TestMemoryFileFormat:
 # Checkpoint persistence tests
 # =====================================================================
 
+
 class TestCheckpoint:
     """save_checkpoint / load_checkpoint / clear_checkpoint."""
 
     def _save_checkpoint(self, path: Path, tf_index: int, tf_total: int, coin: str):
         """Reproduce save_checkpoint from pt_trainer.py."""
         (path / "trainer_checkpoint.json").write_text(
-            json.dumps({
-                "coin": coin,
-                "tf_index": tf_index,
-                "tf_total": tf_total,
-                "timestamp": int(time.time()),
-            }),
+            json.dumps(
+                {
+                    "coin": coin,
+                    "tf_index": tf_index,
+                    "tf_total": tf_total,
+                    "timestamp": int(time.time()),
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -130,11 +132,13 @@ class TestCheckpoint:
 # Progress tracking tests
 # =====================================================================
 
+
 class TestWriteProgress:
     """write_progress — JSON file for Hub UI."""
 
-    def _write_progress(self, path: Path, coin, tf_choice, tf_index, tf_total,
-                        candle_current=0, candle_total=0):
+    def _write_progress(
+        self, path: Path, coin, tf_choice, tf_index, tf_total, candle_current=0, candle_total=0
+    ):
         """Reproduce write_progress from pt_trainer.py."""
         pct = 0
         if tf_total > 0:
@@ -145,16 +149,18 @@ class TestWriteProgress:
                 tf_pct = 0
             pct = min(100, base + tf_pct)
         (path / "trainer_progress.json").write_text(
-            json.dumps({
-                "coin": coin,
-                "timeframe": tf_choice,
-                "tf_index": tf_index,
-                "tf_total": tf_total,
-                "candle_current": candle_current,
-                "candle_total": candle_total,
-                "pct": round(pct, 1),
-                "timestamp": int(time.time()),
-            }),
+            json.dumps(
+                {
+                    "coin": coin,
+                    "timeframe": tf_choice,
+                    "tf_index": tf_index,
+                    "tf_total": tf_total,
+                    "candle_current": candle_current,
+                    "candle_total": candle_total,
+                    "pct": round(pct, 1),
+                    "timestamp": int(time.time()),
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -191,6 +197,7 @@ class TestWriteProgress:
 # =====================================================================
 # Killer file (stop signal) tests
 # =====================================================================
+
 
 class TestShouldStopTraining:
     """should_stop_training — checks killer.txt."""
@@ -235,6 +242,7 @@ class TestShouldStopTraining:
 # =====================================================================
 # Pattern matching (distance calculation) tests
 # =====================================================================
+
 
 class TestPatternDistance:
     """
@@ -294,6 +302,7 @@ class TestPatternDistance:
 # Memory I/O round-trip tests
 # =====================================================================
 
+
 class TestMemoryIO:
     """Test reading and writing memory/weight files."""
 
@@ -308,7 +317,9 @@ class TestMemoryIO:
 
     def test_write_and_read_threshold(self, tmp_path):
         threshold = 1.5
-        (tmp_path / "neural_perfect_threshold_1hour.txt").write_text(str(threshold), encoding="utf-8")
+        (tmp_path / "neural_perfect_threshold_1hour.txt").write_text(
+            str(threshold), encoding="utf-8"
+        )
 
         raw = (tmp_path / "neural_perfect_threshold_1hour.txt").read_text(encoding="utf-8")
         assert float(raw) == pytest.approx(threshold)
