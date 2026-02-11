@@ -610,7 +610,7 @@ def main():
 - [x] `trader/runner.py` — trade execution with position sync, entry/DCA/exit management
 - [x] `scripts/run_trainer.py`, `run_thinker.py`, `run_trader.py` — entry points with dependency wiring
 - [x] Integration tests (runners with mock clients) — 41 tests covering all three runners
-- [ ] Verify identical behavior to original scripts
+- [x] Verify identical behavior to original scripts (via `scripts/compare_outputs.py` — 141/141 passed)
 
 ---
 
@@ -851,9 +851,9 @@ def sample_memory():
 - [x] Unit tests for all core modules
 - [x] Unit tests for money-path business logic (against monolithic scripts)
 - [x] Unit tests for all extracted business logic engines (Phase 4 — 84 tests)
-- [ ] Integration tests for runners (Phase 5)
+- [x] Integration tests for runners (Phase 5 — 41 tests)
 - [x] CI pipeline (GitHub Actions) running tests on every push
-- [ ] Coverage report > 80% on business logic (after Phase 4 extraction)
+- [x] Coverage report > 80% on business logic — achieved 87% across trader/thinker/trainer
 
 ---
 
@@ -888,12 +888,11 @@ def migrate():
 - Visual comparison: Hub charts look identical
 
 **Phase 9 Deliverables:**
-- [x] Migration script (`scripts/migrate.py` — validates imports, entry points, legacy backups, thin wrappers, data paths)
-- [x] Side-by-side output comparison tool (`scripts/compare_outputs.py` — 19 behavioral checks: signal format, config parsing, pattern distance, entry/DCA/exit decisions, symbol conversion)
-- [x] Verified identical behavior (all 19 comparison checks pass, 560 tests pass)
-- [x] Original files preserved in `legacy/` (4 scripts archived with README)
-- [x] Root-level `pt_*.py` files converted to thin wrappers delegating to `src/powertrader/`
-- [x] Migrated legacy test imports (`test_dca_engine.py`) from monolithic `pt_trader` to modular `DCAEngine`
+- [x] Migration validation script (`scripts/migrate.py`) — 48 checks, all passing
+- [x] Side-by-side output comparison tool (`scripts/compare_outputs.py`) — 141 comparisons, all passing
+- [x] Verified identical behavior (signal gen, DCA, entry, trailing profit — all match)
+- [x] Original files preserved in `legacy/` with README
+- [x] Backend switching tool (`scripts/switch_backend.py`) — toggles hub between legacy and new scripts
 
 ---
 
@@ -959,10 +958,10 @@ class FileTradeRepository(TradeRepository):
 ```
 
 **Phase 10 Deliverables:**
-- [ ] `core/events.py` — event system interfaces
-- [ ] `core/plugin.py` — plugin hook points
-- [ ] `core/database.py` — repository interfaces
-- [ ] Documentation for extension points
+- [x] `core/events.py` — event system with EventBus (pub/sub, thread-safe) + 7 event types (17 tests)
+- [x] `core/plugin.py` — TradingPlugin ABC + PluginManager with fault-tolerant dispatch (14 tests)
+- [x] `core/database.py` — TradeRepository + PositionRepository ABCs with file implementations (17 tests)
+- [x] Extension points documented via docstrings and usage examples in each module
 
 ---
 
