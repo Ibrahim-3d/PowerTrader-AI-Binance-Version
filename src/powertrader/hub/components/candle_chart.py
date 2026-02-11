@@ -122,7 +122,7 @@ class CandleChart(ttk.Frame):
                     except (ValueError, tk.TclError):
                         pass
                 self._resize_after_id = self.after_idle(self.canvas.draw_idle)
-            except Exception as exc:
+            except (tk.TclError, ValueError, TypeError, AttributeError) as exc:
                 logger.debug("Canvas configure error: %s", exc)
 
         canvas_w.bind("<Configure>", _on_canvas_configure, add="+")
@@ -138,7 +138,7 @@ class CandleChart(ttk.Frame):
             for spine in self.ax.spines.values():
                 spine.set_color(DARK_BORDER)
             self.ax.grid(True, color=DARK_BORDER, linewidth=0.6, alpha=0.35)
-        except Exception as exc:
+        except (ValueError, TypeError, AttributeError) as exc:
             logger.debug("Failed to apply dark chart style: %s", exc)
 
     def refresh(
@@ -309,7 +309,7 @@ class CandleChart(ttk.Frame):
             _label_right(avg_cost_basis, "AVG", "yellow")
             _label_right(dca_line_price, "DCA", "red")
             _label_right(trail_line, "SELL", "green")
-        except Exception as exc:
+        except (ValueError, TypeError, IndexError) as exc:
             logger.debug("Failed to draw chart labels: %s", exc)
 
         try:
@@ -376,7 +376,7 @@ class CandleChart(ttk.Frame):
                         label, (x, y), textcoords="offset points", xytext=(0, 10),
                         ha="center", fontsize=8, color=DARK_FG, zorder=7,
                     )
-        except Exception as exc:
+        except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
             logger.debug("Failed to draw trade markers: %s", exc)
 
         self.ax.set_xlim(-0.5, (len(candles) - 0.5) + 0.6)
@@ -410,7 +410,7 @@ class CandleChart(ttk.Frame):
             self.ax.set_xticks(tick_x)
             self.ax.set_xticklabels(tick_lbl)
             self.ax.tick_params(axis="x", labelsize=8)
-        except Exception as exc:
+        except (ValueError, TypeError) as exc:
             logger.debug("Failed to set x tick labels: %s", exc)
 
         self.canvas.draw_idle()

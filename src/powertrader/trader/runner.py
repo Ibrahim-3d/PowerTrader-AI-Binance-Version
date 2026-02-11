@@ -98,7 +98,7 @@ class TraderRunner:
                 logger.error("Trade management error: %s", exc)
                 if self._health:
                     self._health.record_error("trader", exc)
-            except Exception as exc:
+            except (RuntimeError, ValueError, TypeError, KeyError, IndexError, ArithmeticError) as exc:
                 logger.error("Unexpected trade management error: %s", exc, exc_info=True)
                 if self._health:
                     self._health.record_error("trader", exc)
@@ -157,7 +157,7 @@ class TraderRunner:
         except (ExchangeError, OSError, ConnectionError) as exc:
             logger.error("Failed to fetch holdings: %s", exc)
             return
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError) as exc:
             logger.error("Unexpected error fetching holdings: %s", exc, exc_info=True)
             return
 
@@ -394,7 +394,7 @@ class TraderRunner:
         except (ExchangeError, OSError, ConnectionError) as exc:
             logger.error("Failed to fetch account balance: %s", exc)
             return 0.0
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError) as exc:
             logger.error("Unexpected error fetching balance: %s", exc, exc_info=True)
             return 0.0
 

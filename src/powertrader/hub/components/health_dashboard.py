@@ -146,5 +146,5 @@ class _StatusRow(ttk.Frame):
         try:
             self._canvas.itemconfigure(self._dot, fill=color)
             self._label.config(text=f"{self._name}: {text}")
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to update health row %s: %s", self._name, exc)
