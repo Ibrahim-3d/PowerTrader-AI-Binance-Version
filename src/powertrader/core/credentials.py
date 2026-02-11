@@ -59,7 +59,7 @@ class BinanceCredentials:
                 return cls(api_key=key, api_secret=secret)
         except ImportError:
             logger.debug("keyring package not installed, skipping keyring lookup.")
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError) as exc:
             logger.debug("Keyring lookup failed: %s", exc)
 
         # 3. Legacy plaintext files

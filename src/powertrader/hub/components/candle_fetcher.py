@@ -24,7 +24,7 @@ class CandleFetcher:
             logger.debug("kucoin package not installed, using REST fallback")
             self._mode = "rest"
             self._market = None
-        except Exception as exc:
+        except (OSError, ConnectionError, RuntimeError, ValueError) as exc:
             logger.debug("KuCoin client init failed: %s", exc)
             self._mode = "rest"
             self._market = None

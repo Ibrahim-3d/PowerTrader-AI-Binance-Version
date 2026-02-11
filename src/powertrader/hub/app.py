@@ -212,7 +212,7 @@ class PowerTraderHub(tk.Tk):
         if skipped:
             try:
                 self.status.config(text=f"Skipped already-trained: {', '.join(skipped)}")
-            except Exception as exc:
+            except (tk.TclError, AttributeError) as exc:
                 logger.debug("Failed to update status for skipped coins: %s", exc)
 
     def force_retrain_all_coins(self) -> None:
@@ -226,7 +226,7 @@ class PowerTraderHub(tk.Tk):
         def _on_status(msg: str) -> None:
             try:
                 self.status.config(text=msg)
-            except Exception as exc:
+            except (tk.TclError, AttributeError) as exc:
                 logger.debug("Failed to update trainer status label: %s", exc)
 
         self.pm.start_trainer_for_coin(coin, force_retrain=force_retrain, on_status=_on_status)
@@ -240,7 +240,7 @@ class PowerTraderHub(tk.Tk):
     def _apply_forced_dark_mode(self) -> None:
         try:
             self.configure(bg=DARK_BG)
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to set root bg: %s", exc)
 
         try:
@@ -257,52 +257,52 @@ class PowerTraderHub(tk.Tk):
             self.option_add("*Menu.foreground", DARK_FG)
             self.option_add("*Menu.activeBackground", DARK_SELECT_BG)
             self.option_add("*Menu.activeForeground", DARK_SELECT_FG)
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to set widget option defaults: %s", exc)
 
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to set ttk theme to clam: %s", exc)
 
         try:
             style.configure(".", background=DARK_BG, foreground=DARK_FG)
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to configure base style: %s", exc)
 
         for name in ("TFrame", "TLabel", "TCheckbutton", "TRadiobutton"):
             try:
                 style.configure(name, background=DARK_BG, foreground=DARK_FG)
-            except Exception as exc:
+            except (tk.TclError, AttributeError) as exc:
                 logger.debug("Failed to configure style %s: %s", name, exc)
 
         try:
             style.configure("TLabelframe", background=DARK_BG, foreground=DARK_FG, bordercolor=DARK_BORDER)
             style.configure("TLabelframe.Label", background=DARK_BG, foreground=DARK_ACCENT)
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to configure TLabelframe style: %s", exc)
 
         try:
             style.configure("TSeparator", background=DARK_BORDER)
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to configure TSeparator style: %s", exc)
 
         try:
             style.configure("TButton", background=DARK_BG2, foreground=DARK_FG, bordercolor=DARK_BORDER, focusthickness=1, focuscolor=DARK_ACCENT, padding=(10, 6))
             style.map("TButton", background=[("active", DARK_PANEL2), ("pressed", DARK_PANEL), ("disabled", DARK_BG2)], foreground=[("active", DARK_ACCENT), ("disabled", DARK_MUTED)], bordercolor=[("active", DARK_ACCENT2), ("focus", DARK_ACCENT)])
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to configure TButton style: %s", exc)
 
         try:
             style.configure("TEntry", fieldbackground=DARK_PANEL, foreground=DARK_FG, bordercolor=DARK_BORDER, insertcolor=DARK_FG)
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to configure TEntry style: %s", exc)
 
         try:
             style.configure("TCombobox", fieldbackground=DARK_PANEL, background=DARK_PANEL, foreground=DARK_FG, bordercolor=DARK_BORDER, arrowcolor=DARK_ACCENT)
             style.map("TCombobox", fieldbackground=[("readonly", DARK_PANEL), ("focus", DARK_PANEL2)], foreground=[("readonly", DARK_FG)], background=[("readonly", DARK_PANEL)])
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to configure TCombobox style: %s", exc)
 
         try:
@@ -317,7 +317,7 @@ class PowerTraderHub(tk.Tk):
             style.map("ChartTab.TButton", background=[("active", DARK_PANEL2), ("pressed", DARK_PANEL)], foreground=[("active", DARK_ACCENT2)], bordercolor=[("active", DARK_ACCENT2), ("focus", DARK_ACCENT)])
 
             style.configure("ChartTabSelected.TButton", background=DARK_PANEL, foreground=DARK_ACCENT, bordercolor=DARK_ACCENT2, padding=(10, 6))
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to configure TNotebook/ChartTab styles: %s", exc)
 
         try:
@@ -325,18 +325,18 @@ class PowerTraderHub(tk.Tk):
             style.map("Treeview", background=[("selected", DARK_SELECT_BG)], foreground=[("selected", DARK_SELECT_FG)])
             style.configure("Treeview.Heading", background=DARK_BG2, foreground=DARK_ACCENT, relief="flat")
             style.map("Treeview.Heading", background=[("active", DARK_PANEL2)], foreground=[("active", DARK_ACCENT2)])
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to configure Treeview style: %s", exc)
 
         try:
             style.configure("TPanedwindow", background=DARK_BG)
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to configure TPanedwindow style: %s", exc)
 
         for sb in ("Vertical.TScrollbar", "Horizontal.TScrollbar"):
             try:
                 style.configure(sb, background=DARK_BG2, troughcolor=DARK_BG, bordercolor=DARK_BORDER, arrowcolor=DARK_ACCENT)
-            except Exception as exc:
+            except (tk.TclError, AttributeError) as exc:
                 logger.debug("Failed to configure %s style: %s", sb, exc)
 
     # ---- menu ----
@@ -379,7 +379,7 @@ class PowerTraderHub(tk.Tk):
         try:
             outer.paneconfigure(left, minsize=360)
             outer.paneconfigure(right, minsize=520)
-        except Exception as exc:
+        except tk.TclError as exc:
             logger.debug("Failed to set outer pane min sizes: %s", exc)
 
         left_split = ttk.Panedwindow(left, orient="vertical")
@@ -416,7 +416,7 @@ class PowerTraderHub(tk.Tk):
                 target = max(min_left, min(total - min_right, desired_left))
                 outer.sashpos(0, int(target))
                 self._did_init_outer_sash = True
-            except Exception as exc:
+            except (tk.TclError, ValueError, TypeError) as exc:
                 logger.debug("Failed to init outer sash position: %s", exc)
 
         self.after_idle(_init_outer_sash_once)
@@ -457,7 +457,7 @@ class PowerTraderHub(tk.Tk):
         def _sync_train_coin(*_):
             try:
                 self.trainer_coin_var.set(self.train_coin_var.get())
-            except Exception as exc:
+            except tk.TclError as exc:
                 logger.debug("Failed to sync train coin var: %s", exc)
 
         self.train_coin_combo.bind("<<ComboboxSelected>>", _sync_train_coin)
@@ -513,13 +513,13 @@ class PowerTraderHub(tk.Tk):
                 else:
                     btn_scroll_y.grid_remove()
                     btn_canvas.yview_moveto(0)
-            except Exception as exc:
+            except (tk.TclError, ValueError, TypeError) as exc:
                 logger.debug("Failed to update button scrollbars: %s", exc)
 
         def _btn_canvas_on_configure(event=None):
             try:
                 btn_canvas.coords(_btn_inner_id, 0, 0)
-            except Exception as exc:
+            except tk.TclError as exc:
                 logger.debug("Failed to reset button canvas coords: %s", exc)
             _btn_update_scrollbars()
 
@@ -650,15 +650,15 @@ class PowerTraderHub(tk.Tk):
                     self._neural_overview_scroll.grid_remove()
                     try:
                         c.yview_moveto(0)
-                    except Exception as exc:
+                    except tk.TclError as exc:
                         logger.debug("Failed to reset neural canvas yview: %s", exc)
-            except Exception as exc:
+            except (tk.TclError, ValueError, TypeError) as exc:
                 logger.debug("Failed to update neural overview scrollbars: %s", exc)
 
         def _on_neural_canvas_configure(e) -> None:
             try:
                 self._neural_overview_canvas.itemconfigure(self._neural_overview_window, width=int(e.width))
-            except Exception as exc:
+            except tk.TclError as exc:
                 logger.debug("Failed to configure neural canvas window width: %s", exc)
             _update_neural_overview_scrollbars()
 
@@ -670,7 +670,7 @@ class PowerTraderHub(tk.Tk):
             try:
                 if self._neural_overview_scroll.winfo_ismapped():
                     self._neural_overview_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-            except Exception as exc:
+            except (tk.TclError, ValueError, TypeError) as exc:
                 logger.debug("Failed to handle mousewheel scroll: %s", exc)
 
         self._neural_overview_canvas.bind("<Enter>", lambda _e: self._neural_overview_canvas.focus_set(), add="+")
@@ -682,7 +682,7 @@ class PowerTraderHub(tk.Tk):
         self._rebuild_neural_overview()
         try:
             self.after_idle(self._update_neural_overview_scrollbars)
-        except Exception as exc:
+        except tk.TclError as exc:
             logger.debug("Failed to schedule neural overview scrollbar update: %s", exc)
 
         # ---- LEFT: Live Output ----
@@ -743,7 +743,7 @@ class PowerTraderHub(tk.Tk):
         try:
             left_split.paneconfigure(top_controls, minsize=360)
             left_split.paneconfigure(logs_frame, minsize=220)
-        except Exception as exc:
+        except tk.TclError as exc:
             logger.debug("Failed to set left split pane min sizes: %s", exc)
 
         def _init_left_split_sash_once():
@@ -762,7 +762,7 @@ class PowerTraderHub(tk.Tk):
                 target = max(min_top, min(total - min_bottom, target))
                 left_split.sashpos(0, int(target))
                 self._did_init_left_split_sash = True
-            except Exception as exc:
+            except (tk.TclError, ValueError, TypeError) as exc:
                 logger.debug("Failed to init left split sash position: %s", exc)
 
         self.after_idle(_init_left_split_sash_once)
@@ -786,7 +786,7 @@ class PowerTraderHub(tk.Tk):
             for f in self.chart_pages.values():
                 try:
                     f.pack_forget()
-                except Exception as exc:
+                except tk.TclError as exc:
                     logger.debug("Failed to pack_forget chart page: %s", exc)
             f = self.chart_pages.get(name)
             if f is not None:
@@ -794,7 +794,7 @@ class PowerTraderHub(tk.Tk):
             for txt, b in self._chart_tab_buttons.items():
                 try:
                     b.configure(style=("ChartTabSelected.TButton" if txt == name else "ChartTab.TButton"))
-                except Exception as exc:
+                except tk.TclError as exc:
                     logger.debug("Failed to update chart tab button style: %s", exc)
             # Immediately refresh coin chart on page switch
             try:
@@ -810,7 +810,7 @@ class PowerTraderHub(tk.Tk):
                                     if getattr(self, "_coin_folders_sig", None) != cf_sig:
                                         self._coin_folders_sig = cf_sig
                                         self.coin_folders = build_coin_folders(self.settings["main_neural_dir"], self.coins)
-                                except Exception as exc:
+                                except (tk.TclError, OSError, ValueError, TypeError) as exc:
                                     logger.debug("Failed to rebuild coin folders on page switch: %s", exc)
                                 pos = self._last_positions.get(coin, {}) if isinstance(self._last_positions, dict) else {}
                                 chart.refresh(
@@ -821,10 +821,10 @@ class PowerTraderHub(tk.Tk):
                                     dca_line_price=pos.get("dca_line_price"),
                                     avg_cost_basis=pos.get("avg_cost_basis"),
                                 )
-                            except Exception as exc:
+                            except (tk.TclError, OSError, ValueError, TypeError) as exc:
                                 logger.debug("Failed to refresh chart on page switch: %s", exc)
                         self.after(1, _do_refresh_visible)
-            except Exception as exc:
+            except (tk.TclError, OSError, ValueError, TypeError) as exc:
                 logger.debug("Failed to trigger chart refresh on page switch: %s", exc)
 
         self._show_chart_page = _show_page
@@ -934,13 +934,13 @@ class PowerTraderHub(tk.Tk):
         try:
             right_split.paneconfigure(charts_frame, minsize=360)
             right_split.paneconfigure(right_bottom_split, minsize=220)
-        except Exception as exc:
+        except tk.TclError as exc:
             logger.debug("Failed to set right split pane min sizes: %s", exc)
 
         try:
             right_bottom_split.paneconfigure(trades_frame, minsize=140)
             right_bottom_split.paneconfigure(hist_frame, minsize=120)
-        except Exception as exc:
+        except tk.TclError as exc:
             logger.debug("Failed to set right bottom split pane min sizes: %s", exc)
 
         def _init_right_split_sash_once():
@@ -958,7 +958,7 @@ class PowerTraderHub(tk.Tk):
                 target = max(min_top, min(total - min_bottom, desired_top))
                 right_split.sashpos(0, int(target))
                 self._did_init_right_split_sash = True
-            except Exception as exc:
+            except (tk.TclError, ValueError, TypeError) as exc:
                 logger.debug("Failed to init right split sash position: %s", exc)
 
         def _init_right_bottom_split_sash_once():
@@ -976,7 +976,7 @@ class PowerTraderHub(tk.Tk):
                 target = max(min_top, min(total - min_bottom, desired_top))
                 right_bottom_split.sashpos(0, int(target))
                 self._did_init_right_bottom_split_sash = True
-            except Exception as exc:
+            except (tk.TclError, ValueError, TypeError) as exc:
                 logger.debug("Failed to init right bottom split sash position: %s", exc)
 
         self.after_idle(_init_right_split_sash_once)
@@ -1013,7 +1013,7 @@ class PowerTraderHub(tk.Tk):
 
         try:
             self._paned_clamp_after_ids[key] = self.after(1, _run)
-        except Exception as exc:
+        except tk.TclError as exc:
             logger.debug("Failed to schedule paned clamp: %s", exc)
 
     def _clamp_panedwindow_sashes(self, pw: ttk.Panedwindow) -> None:
@@ -1059,7 +1059,7 @@ class PowerTraderHub(tk.Tk):
                             pw.sashpos(i, new)
                         except tk.TclError as exc:
                             logger.debug("Failed to set sash position %d: %s", i, exc)
-        except Exception as exc:
+        except (tk.TclError, ValueError, TypeError) as exc:
             logger.debug("Failed to clamp panedwindow sashes: %s", exc)
 
     # ---- timeframe change ----
@@ -1083,7 +1083,7 @@ class PowerTraderHub(tk.Tk):
                 avg_cost_basis=pos.get("avg_cost_basis"),
             )
             self._last_chart_refresh = time.time()
-        except Exception as exc:
+        except (tk.TclError, OSError, ValueError, TypeError) as exc:
             logger.debug("Failed to handle timeframe change: %s", exc)
 
     # ---- refresh loop ----
@@ -1097,7 +1097,7 @@ class PowerTraderHub(tk.Tk):
                 changed = True
         except queue.Empty:
             pass
-        except Exception as exc:
+        except (tk.TclError, ValueError, TypeError) as exc:
             logger.debug("Failed to drain queue to text widget: %s", exc)
 
         if changed:
@@ -1105,7 +1105,7 @@ class PowerTraderHub(tk.Tk):
                 current = int(txt.index("end-1c").split(".")[0])
                 if current > max_lines:
                     txt.delete("1.0", f"{current - max_lines}.0")
-            except Exception as exc:
+            except (tk.TclError, ValueError, TypeError) as exc:
                 logger.debug("Failed to trim text widget lines: %s", exc)
                 pass
             txt.see("end")
@@ -1123,7 +1123,7 @@ class PowerTraderHub(tk.Tk):
                     self.btn_toggle_all.config(text="Stop All")
                 else:
                     self.btn_toggle_all.config(text="Start All")
-        except Exception as exc:
+        except tk.TclError as exc:
             logger.debug("Failed to update toggle-all button text: %s", exc)
 
         # Flow gating
@@ -1136,7 +1136,7 @@ class PowerTraderHub(tk.Tk):
 
         try:
             self.btn_toggle_all.configure(state=("normal" if can_toggle_all else "disabled"))
-        except Exception as exc:
+        except tk.TclError as exc:
             logger.debug("Failed to update toggle-all button state: %s", exc)
 
         # Training overview
@@ -1185,13 +1185,13 @@ class PowerTraderHub(tk.Tk):
                 self.lbl_flow_hint.config(text="Flow: Running (use the button to stop)")
             else:
                 self.lbl_flow_hint.config(text="Flow: Start All")
-        except Exception as exc:
+        except (tk.TclError, OSError, ValueError, TypeError) as exc:
             logger.debug("Failed to refresh training overview: %s", exc)
 
         # Training progress bar
         try:
             self._refresh_training_progress(self.pm.running_trainers())
-        except Exception as exc:
+        except (tk.TclError, OSError, ValueError, TypeError) as exc:
             logger.debug("Failed to refresh training progress: %s", exc)
 
         self._refresh_neural_overview()
@@ -1206,7 +1206,7 @@ class PowerTraderHub(tk.Tk):
             try:
                 if self.account_chart:
                     self.account_chart.refresh()
-            except Exception as exc:
+            except (tk.TclError, OSError, ValueError, TypeError) as exc:
                 logger.debug("Failed to refresh account chart: %s", exc)
 
             try:
@@ -1214,11 +1214,11 @@ class PowerTraderHub(tk.Tk):
                 if getattr(self, "_coin_folders_sig", None) != cf_sig:
                     self._coin_folders_sig = cf_sig
                     self.coin_folders = build_coin_folders(self.settings["main_neural_dir"], self.coins)
-            except Exception as exc:
+            except (OSError, ValueError, TypeError) as exc:
                 logger.debug("Failed to check coin_folders signature: %s", exc)
                 try:
                     self.coin_folders = build_coin_folders(self.settings["main_neural_dir"], self.coins)
-                except Exception as exc2:
+                except (OSError, ValueError, TypeError) as exc2:
                     logger.debug("Failed to rebuild coin_folders fallback: %s", exc2)
 
             selected_tab = getattr(self, "_current_chart_page", None)
@@ -1245,7 +1245,7 @@ class PowerTraderHub(tk.Tk):
                             dca_line_price=pos.get("dca_line_price"),
                             avg_cost_basis=pos.get("avg_cost_basis"),
                         )
-                    except Exception as exc:
+                    except (tk.TclError, OSError, ValueError, TypeError) as exc:
                         logger.debug("Failed to refresh chart for %s: %s", coin, exc)
 
             self._last_chart_refresh = now
@@ -1261,7 +1261,7 @@ class PowerTraderHub(tk.Tk):
             lp = self.pm.trainers.get(sel)
             if lp:
                 self._drain_queue_to_text(lp.log_q, self.trainer_text)
-        except Exception as exc:
+        except (tk.TclError, ValueError, TypeError) as exc:
             logger.debug("Failed to drain trainer logs: %s", exc)
 
         self.status.config(text=f"{now_str()} | hub_dir={self.hub_dir}")
@@ -1306,7 +1306,7 @@ class PowerTraderHub(tk.Tk):
                 avg_pct = sum(p[2] for p in coin_progress) / len(coin_progress)
                 self.lbl_training_progress.config(text=f"Training {len(coin_progress)} coins ({avg_pct:.0f}%)")
                 self.training_progress_bar["value"] = avg_pct
-        except Exception as exc:
+        except (tk.TclError, OSError, ValueError, TypeError) as exc:
             logger.debug("Failed to refresh training progress bar: %s", exc)
 
     def _refresh_trader_status(self) -> None:
@@ -1329,7 +1329,7 @@ class PowerTraderHub(tk.Tk):
                 self.lbl_acct_percent_in_trade.config(text="Percent In Trade: N/A")
                 self.lbl_acct_dca_spread.config(text="DCA Levels (spread): N/A")
                 self.lbl_acct_dca_single.config(text="DCA Levels (single): N/A")
-            except Exception as exc:
+            except tk.TclError as exc:
                 logger.debug("Failed to reset account labels: %s", exc)
             for iid in self.trades_tree.get_children():
                 self.trades_tree.delete(iid)
@@ -1395,7 +1395,7 @@ class PowerTraderHub(tk.Tk):
 
             self.lbl_acct_dca_spread.config(text=f"DCA Levels (spread): {spread_levels}")
             self.lbl_acct_dca_single.config(text=f"DCA Levels (single): {single_levels}")
-        except Exception as exc:
+        except (tk.TclError, ValueError, TypeError) as exc:
             logger.debug("Failed to refresh account info panel: %s", exc)
 
         positions = data.get("positions", {}) or {}
@@ -1477,7 +1477,7 @@ class PowerTraderHub(tk.Tk):
                 max_dca_24h = 0
             try:
                 self.trades_tree.heading("dca_24h", text=f"DCA 24h (max {max_dca_24h})")
-            except Exception as exc:
+            except tk.TclError as exc:
                 logger.debug("Failed to update DCA 24h column heading: %s", exc)
             dca_24h_display = f"{dca_24h}/{max_dca_24h}"
 
@@ -1558,7 +1558,7 @@ class PowerTraderHub(tk.Tk):
                 trader_status_age=trader_age,
                 last_error=last_error,
             )
-        except Exception as exc:
+        except (tk.TclError, OSError, ValueError, TypeError) as exc:
             logger.debug("Failed to refresh health dashboard: %s", exc)
 
     def _refresh_pnl(self) -> None:
@@ -1663,21 +1663,21 @@ class PowerTraderHub(tk.Tk):
             if hasattr(self, "train_coin_var") and hasattr(self, "trainer_coin_var"):
                 if self.train_coin_var.get():
                     self.trainer_coin_var.set(self.train_coin_var.get())
-        except Exception as exc:
+        except tk.TclError as exc:
             logger.debug("Failed to update coin combo boxes: %s", exc)
 
         try:
             if hasattr(self, "neural_wrap") and self.neural_wrap.winfo_exists():
                 self._rebuild_neural_overview()
                 self._refresh_neural_overview()
-        except Exception as exc:
+        except (tk.TclError, OSError, ValueError, TypeError) as exc:
             logger.debug("Failed to rebuild neural overview: %s", exc)
 
         try:
             prev_set = set([str(c).strip().upper() for c in (prev_coins or []) if str(c).strip()])
             if prev_set != set(self.coins):
                 self._rebuild_coin_chart_tabs()
-        except Exception as exc:
+        except (tk.TclError, OSError, ValueError, TypeError) as exc:
             logger.debug("Failed to rebuild coin chart tabs: %s", exc)
 
     def _rebuild_neural_overview(self) -> None:
@@ -1689,7 +1689,7 @@ class PowerTraderHub(tk.Tk):
             else:
                 for ch in list(self.neural_wrap.winfo_children()):
                     ch.destroy()
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to clear neural wrap children: %s", exc)
 
         self.neural_tiles = {}
@@ -1700,7 +1700,7 @@ class PowerTraderHub(tk.Tk):
             def _on_enter(_e=None, t=tile):
                 try:
                     t.set_hover(True)
-                except Exception as exc:
+                except (tk.TclError, AttributeError) as exc:
                     logger.debug("Failed to set tile hover on: %s", exc)
 
             def _on_leave(_e=None, t=tile):
@@ -1712,11 +1712,11 @@ class PowerTraderHub(tk.Tk):
                         if w == t:
                             return
                         w = getattr(w, "master", None)
-                except Exception as exc:
+                except (tk.TclError, AttributeError) as exc:
                     logger.debug("Failed to check pointer containment on leave: %s", exc)
                 try:
                     t.set_hover(False)
-                except Exception as exc:
+                except (tk.TclError, AttributeError) as exc:
                     logger.debug("Failed to set tile hover off: %s", exc)
 
             tile.bind("<Enter>", _on_enter, add="+")
@@ -1725,7 +1725,7 @@ class PowerTraderHub(tk.Tk):
                 for w in tile.winfo_children():
                     w.bind("<Enter>", _on_enter, add="+")
                     w.bind("<Leave>", _on_leave, add="+")
-            except Exception as exc:
+            except (tk.TclError, AttributeError) as exc:
                 logger.debug("Failed to bind Enter/Leave on tile children: %s", exc)
 
             def _open_coin_chart(_e=None, c=coin):
@@ -1733,14 +1733,14 @@ class PowerTraderHub(tk.Tk):
                     fn = getattr(self, "_show_chart_page", None)
                     if callable(fn):
                         fn(str(c).strip().upper())
-                except Exception as exc:
+                except (tk.TclError, AttributeError) as exc:
                     logger.debug("Failed to open coin chart page: %s", exc)
 
             tile.bind("<Button-1>", _open_coin_chart, add="+")
             try:
                 for w in tile.winfo_children():
                     w.bind("<Button-1>", _open_coin_chart, add="+")
-            except Exception as exc:
+            except (tk.TclError, AttributeError) as exc:
                 logger.debug("Failed to bind Button-1 on tile children: %s", exc)
 
             self.neural_wrap.add(tile, padx=(0, 6), pady=(0, 6))
@@ -1748,13 +1748,13 @@ class PowerTraderHub(tk.Tk):
 
         try:
             self.neural_wrap._schedule_reflow()
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to schedule neural wrap reflow: %s", exc)
         try:
             fn = getattr(self, "_update_neural_overview_scrollbars", None)
             if callable(fn):
                 self.after_idle(fn)
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to schedule neural overview scrollbar update after rebuild: %s", exc)
 
     def _refresh_neural_overview(self) -> None:
@@ -1766,7 +1766,7 @@ class PowerTraderHub(tk.Tk):
             if getattr(self, "_coin_folders_sig", None) != sig:
                 self._coin_folders_sig = sig
                 self.coin_folders = build_coin_folders(self.settings.get("main_neural_dir") or self.project_dir, self.coins)
-        except Exception as exc:
+        except (tk.TclError, OSError, ValueError, TypeError) as exc:
             logger.debug("Failed to rebuild coin folders for neural overview: %s", exc)
 
         if not hasattr(self, "_neural_overview_cache"):
@@ -1838,7 +1838,7 @@ class PowerTraderHub(tk.Tk):
                     self.lbl_neural_overview_last.config(text=f"Last: {time.strftime('%H:%M:%S', time.localtime(float(latest_ts)))}")
                 else:
                     self.lbl_neural_overview_last.config(text="Last: N/A")
-        except Exception as exc:
+        except (tk.TclError, ValueError, TypeError) as exc:
             logger.debug("Failed to update neural overview last timestamp: %s", exc)
 
     def _rebuild_coin_chart_tabs(self) -> None:
@@ -1853,12 +1853,12 @@ class PowerTraderHub(tk.Tk):
         try:
             if hasattr(self, "chart_tabs_bar") and self.chart_tabs_bar.winfo_exists():
                 self.chart_tabs_bar.destroy()
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to destroy chart tabs bar: %s", exc)
         try:
             if hasattr(self, "chart_pages_container") and self.chart_pages_container.winfo_exists():
                 self.chart_pages_container.destroy()
-        except Exception as exc:
+        except (tk.TclError, AttributeError) as exc:
             logger.debug("Failed to destroy chart pages container: %s", exc)
 
         self.chart_tabs_bar = WrapFrame(charts_frame)
@@ -1876,7 +1876,7 @@ class PowerTraderHub(tk.Tk):
             for f in self.chart_pages.values():
                 try:
                     f.pack_forget()
-                except Exception as exc:
+                except tk.TclError as exc:
                     logger.debug("Failed to pack_forget chart page: %s", exc)
             f = self.chart_pages.get(name)
             if f is not None:
@@ -1884,7 +1884,7 @@ class PowerTraderHub(tk.Tk):
             for txt, b in self._chart_tab_buttons.items():
                 try:
                     b.configure(style=("ChartTabSelected.TButton" if txt == name else "ChartTab.TButton"))
-                except Exception as exc:
+                except tk.TclError as exc:
                     logger.debug("Failed to update chart tab button style: %s", exc)
 
         self._show_chart_page = _show_page
@@ -1956,7 +1956,7 @@ class PowerTraderHub(tk.Tk):
     def _on_close(self) -> None:
         try:
             self.stop_all_scripts()
-        except Exception as exc:
+        except (tk.TclError, OSError) as exc:
             logger.debug("Failed to stop all scripts on close: %s", exc)
         self.destroy()
 

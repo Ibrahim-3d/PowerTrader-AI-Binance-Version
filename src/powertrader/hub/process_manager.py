@@ -230,7 +230,7 @@ class ProcessManager:
         if after_cb:
             try:
                 after_cb(250, lambda: self._poll_runner_ready_then_start_trader(after_cb))
-            except Exception as exc:
+            except (RuntimeError, ValueError, TypeError) as exc:
                 logger.debug("Polling schedule failed: %s", exc)
 
     # ---- training ----
