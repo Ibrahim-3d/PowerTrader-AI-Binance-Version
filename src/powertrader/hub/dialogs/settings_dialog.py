@@ -327,7 +327,7 @@ class SettingsDialog:
                 messagebox.showinfo("Saved", "Settings saved.")
                 win.destroy()
 
-            except Exception as e:
+            except (ValueError, TypeError, OSError, tk.TclError) as e:
                 messagebox.showerror("Error", f"Failed to save settings:\n{e}")
 
         ttk.Button(btns, text="Save", command=save).pack(side="left")
@@ -379,7 +379,7 @@ class SettingsDialog:
                     subprocess.Popen(["open", folder])
                     return
                 subprocess.Popen(["xdg-open", folder])
-            except Exception as e:
+            except OSError as e:
                 messagebox.showerror("Couldn't open folder", f"Tried to open:\n{self.project_dir}\n\nError:\n{e}")
 
         def _clear_api_files() -> None:
@@ -398,7 +398,7 @@ class SettingsDialog:
                     os.remove(key_path)
                 if os.path.isfile(secret_path):
                     os.remove(secret_path)
-            except Exception as e:
+            except OSError as e:
                 messagebox.showerror("Delete failed", f"Couldn't delete the files:\n\n{e}")
                 return
             _refresh_api_status()
@@ -575,7 +575,7 @@ class SettingsDialog:
                     "Your API Key + Secret Key worked!\n\n"
                     f"Binance responded successfully.\nUSDT balance: {usdt_balance}\n\nNext: click Save."
                 )
-            except Exception as e:
+            except (OSError, ConnectionError, ValueError, RuntimeError) as e:
                 err_str = str(e)
                 hint = ""
                 if "APIError(code=-2015)" in err_str or "Invalid API-key" in err_str:
@@ -636,7 +636,7 @@ class SettingsDialog:
                     f.write(api_key)
                 with open(secret_path, "w", encoding="utf-8") as f:
                     f.write(secret_key)
-            except Exception as e:
+            except OSError as e:
                 messagebox.showerror("Save failed", f"Couldn't write the credential files.\n\nError:\n{e}")
                 return
 

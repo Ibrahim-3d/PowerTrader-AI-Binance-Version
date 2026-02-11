@@ -190,10 +190,12 @@ class BinanceTradingClient(TradingClient):
                 mid = (ask + bid) / 2.0 if ask > 0 and bid > 0 else 0.0
                 if mid > 0:
                     result[coin] = mid
-            except (OSError, ConnectionError, ValueError, TypeError) as exc:
+            except (OSError, ConnectionError, ValueError, TypeError, KeyError) as exc:
                 logger.debug("Price fetch failed for %s: %s", coin, exc)
+            except ExchangeError:
+                raise
             except Exception as exc:
-                logger.warning("Unexpected price fetch error for %s: %s", coin, exc)
+                raise ExchangeError(f"Unexpected price fetch error for {coin}: {exc}") from exc
         return result
 
     # -- order execution (private) -------------------------------------------
@@ -234,11 +236,12 @@ class BinanceTradingClient(TradingClient):
         except (OSError, ConnectionError) as exc:
             logger.error("Order %s %s %s network error: %s", side, quantity, coin, exc)
             return None
+        except (ExchangeError, OrderError):
+            raise
         except Exception as exc:
-            logger.error(
-                "Order %s %s %s unexpected error: %s", side, quantity, coin, exc, exc_info=True
-            )
-            return None
+            raise OrderError(
+                f"Order {side} {quantity} {coin} unexpected error: {exc}"
+            ) from exc
 
         adapted = self._adapt_order(raw)
         order_id = str(adapted.get("id", ""))
@@ -273,10 +276,8 @@ class BinanceTradingClient(TradingClient):
                 state = str(adapted.get("state", "")).lower()
                 if state in _TERMINAL_STATES:
                     return adapted
-            except (OSError, ConnectionError, ValueError, TypeError) as exc:
+            except (OSError, ConnectionError, ValueError, TypeError, KeyError) as exc:
                 logger.debug("Order poll for %s/%s failed: %s", symbol, order_id, exc)
-            except Exception as exc:
-                logger.debug("Order poll for %s/%s unexpected error: %s", symbol, order_id, exc)
             time.sleep(1)
         logger.warning("Order %s/%s: timeout waiting for terminal state", symbol, order_id)
         return None
@@ -301,10 +302,8 @@ class BinanceTradingClient(TradingClient):
                             "minQty": f.get("minQty", "0.00000001"),
                         }
                         break
-        except (OSError, ConnectionError, ValueError, TypeError, KeyError) as exc:
+        except (OSError, ConnectionError, ValueError, TypeError, KeyError, AttributeError) as exc:
             logger.debug("get_symbol_info(%s) failed: %s", symbol, exc)
-        except Exception as exc:
-            logger.warning("get_symbol_info(%s) unexpected error: %s", symbol, exc)
 
         self._lot_size_cache[symbol] = default
         return default
@@ -329,11 +328,8 @@ class BinanceTradingClient(TradingClient):
             self._rate_limiter.acquire()
             ticker = self._client.get_orderbook_ticker(symbol=symbol)  # type: ignore[union-attr]
             return float(ticker.get("askPrice", 0.0) or 0.0)
-        except (OSError, ConnectionError, ValueError, TypeError) as exc:
+        except (OSError, ConnectionError, ValueError, TypeError, KeyError) as exc:
             logger.debug("Ask price fetch failed for %s: %s", symbol, exc)
-            return 0.0
-        except Exception as exc:
-            logger.warning("Ask price fetch unexpected error for %s: %s", symbol, exc)
             return 0.0
 
     # -- response adaptation --------------------------------------------------

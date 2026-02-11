@@ -165,7 +165,7 @@ class TrainerRunner:
                 logger.error("Training %s/%s failed: %s", coin, timeframe, exc)
                 if self._health:
                     self._health.record_error("trainer", exc)
-            except Exception as exc:
+            except (RuntimeError, ValueError, TypeError, KeyError, IndexError, ArithmeticError) as exc:
                 logger.error(
                     "Training %s/%s unexpected error: %s", coin, timeframe, exc, exc_info=True
                 )

@@ -37,7 +37,7 @@ class WrapFrame(ttk.Frame):
             if destroy_widgets:
                 try:
                     it.w.destroy()
-                except Exception:
+                except (tk.TclError, AttributeError):
                     pass
         self._items = []
         self._schedule_reflow()

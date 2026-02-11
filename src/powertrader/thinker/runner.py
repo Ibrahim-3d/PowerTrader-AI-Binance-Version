@@ -103,7 +103,7 @@ class ThinkerRunner:
                 logger.error("Signal generation I/O error for %s: %s", coin, exc)
                 if self._health:
                     self._health.record_error("thinker", exc)
-            except Exception as exc:
+            except (RuntimeError, ValueError, TypeError, KeyError, IndexError, ArithmeticError) as exc:
                 logger.error("Signal generation failed for %s: %s", coin, exc, exc_info=True)
                 if self._health:
                     self._health.record_error("thinker", exc)
