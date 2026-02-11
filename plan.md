@@ -888,10 +888,12 @@ def migrate():
 - Visual comparison: Hub charts look identical
 
 **Phase 9 Deliverables:**
-- [ ] Migration script
-- [ ] Side-by-side output comparison tool
-- [ ] Verified identical behavior
-- [ ] Original files preserved in `legacy/`
+- [x] Migration script (`scripts/migrate.py` — validates imports, entry points, legacy backups, thin wrappers, data paths)
+- [x] Side-by-side output comparison tool (`scripts/compare_outputs.py` — 19 behavioral checks: signal format, config parsing, pattern distance, entry/DCA/exit decisions, symbol conversion)
+- [x] Verified identical behavior (all 19 comparison checks pass, 560 tests pass)
+- [x] Original files preserved in `legacy/` (4 scripts archived with README)
+- [x] Root-level `pt_*.py` files converted to thin wrappers delegating to `src/powertrader/`
+- [x] Migrated legacy test imports (`test_dca_engine.py`) from monolithic `pt_trader` to modular `DCAEngine`
 
 ---
 

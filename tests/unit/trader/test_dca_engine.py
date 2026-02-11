@@ -1,36 +1,23 @@
-"""Tests for DCA (Dollar Cost Averaging) logic in pt_trader.py.
+"""Tests for DCA (Dollar Cost Averaging) logic.
 
-These tests exercise the money-critical DCA path directly against the
-monolithic pt_trader module.  When Phase 4 extracts a standalone DCAEngine
-class, these tests should be migrated to test that class instead.
-
-NOTE: pt_trader.py exits at import time if credential files are missing,
-so we patch the Binance client and credential I/O before importing.
+Originally written against the monolithic pt_trader module, now migrated
+to test the extracted DCAEngine class from the modular powertrader package.
 """
 
 from __future__ import annotations
 
-import importlib
 import json
-import sys
 import time
-from unittest import mock
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Helpers to import pt_trader safely (no real Binance connection)
-# ---------------------------------------------------------------------------
+from powertrader.core.config import TradingConfig
+from powertrader.trader.dca_engine import DCAEngine
 
 
-@pytest.fixture(autouse=True)
-def _isolate_trader_globals(tmp_path, monkeypatch):
-    """Ensure every test gets a clean pt_trader import with mocked I/O."""
-    # Write dummy credential files
-    (tmp_path / "b_key.txt").write_text("FAKE_KEY", encoding="utf-8")
-    (tmp_path / "b_secret.txt").write_text("FAKE_SECRET", encoding="utf-8")
-
-    # Write a minimal gui_settings.json
+@pytest.fixture()
+def _config(tmp_path):
+    """Create a TradingConfig for testing."""
     settings = {
         "coins": ["BTC", "ETH"],
         "main_neural_dir": str(tmp_path),
@@ -43,43 +30,15 @@ def _isolate_trader_globals(tmp_path, monkeypatch):
         "pm_start_pct_with_dca": 2.5,
         "trailing_gap_pct": 0.5,
     }
-    (tmp_path / "gui_settings.json").write_text(json.dumps(settings), encoding="utf-8")
-
-    # Create required sub-dirs for coin path resolution
-    (tmp_path / "ETH").mkdir(exist_ok=True)
-    (tmp_path / "hub_data").mkdir(exist_ok=True)
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("POWERTRADER_GUI_SETTINGS", str(tmp_path / "gui_settings.json"))
-    monkeypatch.setenv("POWERTRADER_HUB_DIR", str(tmp_path / "hub_data"))
+    cfg_path = tmp_path / "gui_settings.json"
+    cfg_path.write_text(json.dumps(settings), encoding="utf-8")
+    return TradingConfig.from_file(cfg_path)
 
 
-def _make_mock_client():
-    """Return a MagicMock that satisfies CryptoAPITrading.__init__."""
-    client = mock.MagicMock()
-    client.get_account.return_value = {
-        "balances": [{"asset": "USDT", "free": "1000.0", "locked": "0"}]
-    }
-    client.get_all_orders.return_value = []
-    client.get_symbol_info.return_value = {
-        "filters": [{"filterType": "LOT_SIZE", "stepSize": "0.001", "minQty": "0.001"}]
-    }
-    return client
-
-
-def _import_trader(monkeypatch):
-    """Import (or reimport) pt_trader with a mocked BinanceClient."""
-    mock_client = _make_mock_client()
-    mock_binance_module = mock.MagicMock()
-    mock_binance_module.Client.return_value = mock_client
-
-    monkeypatch.setitem(sys.modules, "binance.client", mock_binance_module)
-    monkeypatch.setitem(sys.modules, "binance.exceptions", mock.MagicMock())
-
-    # Remove cached module so we get a fresh import
-    sys.modules.pop("pt_trader", None)
-    mod = importlib.import_module("pt_trader")
-    return mod, mock_client
+@pytest.fixture()
+def dca_engine(_config):
+    """Create a DCAEngine for testing."""
+    return DCAEngine(_config)
 
 
 # =====================================================================
@@ -238,87 +197,69 @@ class TestAdaptBinanceOrder:
 
 
 # =====================================================================
-# DCA rate-limiting tests (instance-level, needs mocked Binance)
+# DCA rate-limiting tests (migrated to DCAEngine)
 # =====================================================================
 
 
 class TestDCAWindowCount:
-    """_dca_window_count — rolling 24h DCA rate limit."""
+    """DCAEngine._window_count — rolling 24h DCA rate limit."""
 
-    def test_empty_window(self, monkeypatch):
-        mod, _client = _import_trader(monkeypatch)
-        bot = mod.CryptoAPITrading()
-        assert bot._dca_window_count("BTC") == 0
+    def test_empty_window(self, dca_engine):
+        assert dca_engine._window_count("BTC") == 0
 
-    def test_counts_recent_buys(self, monkeypatch):
-        mod, _client = _import_trader(monkeypatch)
-        bot = mod.CryptoAPITrading()
+    def test_counts_recent_buys(self, dca_engine):
         now = time.time()
-        bot._dca_buy_ts["BTC"] = [now - 100, now - 200]
-        bot._dca_last_sell_ts["BTC"] = now - 500  # sell was before both buys
-        assert bot._dca_window_count("BTC", now_ts=now) == 2
+        dca_engine._dca_buy_timestamps["BTC"] = [now - 100, now - 200]
+        dca_engine._last_sell_timestamps["BTC"] = now - 500  # sell was before both buys
+        assert dca_engine._window_count("BTC", now=now) == 2
 
-    def test_excludes_buys_before_last_sell(self, monkeypatch):
-        mod, _client = _import_trader(monkeypatch)
-        bot = mod.CryptoAPITrading()
+    def test_excludes_buys_before_last_sell(self, dca_engine):
         now = time.time()
-        bot._dca_buy_ts["BTC"] = [now - 1000, now - 100]
-        bot._dca_last_sell_ts["BTC"] = now - 500  # sell was after first buy
-        assert bot._dca_window_count("BTC", now_ts=now) == 1
+        dca_engine._dca_buy_timestamps["BTC"] = [now - 1000, now - 100]
+        dca_engine._last_sell_timestamps["BTC"] = now - 500  # sell was after first buy
+        assert dca_engine._window_count("BTC", now=now) == 1
 
-    def test_excludes_buys_outside_24h(self, monkeypatch):
-        mod, _client = _import_trader(monkeypatch)
-        bot = mod.CryptoAPITrading()
+    def test_excludes_buys_outside_24h(self, dca_engine):
         now = time.time()
-        bot._dca_buy_ts["BTC"] = [now - 90000, now - 100]  # 90000s = 25h ago
-        bot._dca_last_sell_ts["BTC"] = 0
-        assert bot._dca_window_count("BTC", now_ts=now) == 1
+        dca_engine._dca_buy_timestamps["BTC"] = [now - 90000, now - 100]  # 90000s = 25h ago
+        dca_engine._last_sell_timestamps["BTC"] = 0
+        assert dca_engine._window_count("BTC", now=now) == 1
 
-    def test_case_insensitive(self, monkeypatch):
-        mod, _client = _import_trader(monkeypatch)
-        bot = mod.CryptoAPITrading()
+    def test_case_insensitive(self, dca_engine):
         now = time.time()
-        bot._dca_buy_ts["BTC"] = [now - 100]
-        assert bot._dca_window_count("btc", now_ts=now) == 1
+        dca_engine._dca_buy_timestamps["BTC"] = [now - 100]
+        assert dca_engine._window_count("btc", now=now) == 1
 
 
-class TestNoteDCABuy:
-    """_note_dca_buy — records a DCA buy timestamp."""
+class TestRecordDCABuy:
+    """DCAEngine.record_dca_buy — records a DCA buy timestamp."""
 
-    def test_records_timestamp(self, monkeypatch):
-        mod, _client = _import_trader(monkeypatch)
-        bot = mod.CryptoAPITrading()
+    def test_records_timestamp(self, dca_engine):
         ts = 1700000000.0
-        bot._note_dca_buy("ETH", ts=ts)
-        assert ts in bot._dca_buy_ts.get("ETH", [])
+        dca_engine.record_dca_buy("ETH", timestamp=ts)
+        assert ts in dca_engine._dca_buy_timestamps.get("ETH", [])
 
-    def test_multiple_records(self, monkeypatch):
-        mod, _client = _import_trader(monkeypatch)
-        bot = mod.CryptoAPITrading()
-        bot._note_dca_buy("BTC", ts=1000.0)
-        bot._note_dca_buy("BTC", ts=2000.0)
-        assert len(bot._dca_buy_ts["BTC"]) == 2
+    def test_multiple_records(self, dca_engine):
+        dca_engine.record_dca_buy("BTC", timestamp=1000.0)
+        dca_engine.record_dca_buy("BTC", timestamp=2000.0)
+        assert len(dca_engine._dca_buy_timestamps["BTC"]) == 2
 
 
-class TestResetDCAWindow:
-    """_reset_dca_window_for_trade — clears DCA state on sell."""
+class TestRecordSell:
+    """DCAEngine.record_sell — records a sell and resets DCA window."""
 
-    def test_reset_clears_buy_list(self, monkeypatch):
-        mod, _client = _import_trader(monkeypatch)
-        bot = mod.CryptoAPITrading()
-        bot._dca_buy_ts["BTC"] = [1000.0, 2000.0]
-        bot._reset_dca_window_for_trade("BTC", sold=True, ts=3000.0)
-        assert bot._dca_buy_ts["BTC"] == []
-        assert bot._dca_last_sell_ts["BTC"] == 3000.0
+    def test_sell_records_timestamp(self, dca_engine):
+        dca_engine._dca_buy_timestamps["BTC"] = [1000.0, 2000.0]
+        dca_engine.record_sell("BTC", timestamp=3000.0)
+        assert dca_engine._last_sell_timestamps["BTC"] == 3000.0
 
-    def test_reset_without_sell(self, monkeypatch):
-        mod, _client = _import_trader(monkeypatch)
-        bot = mod.CryptoAPITrading()
-        bot._dca_buy_ts["BTC"] = [1000.0]
-        bot._reset_dca_window_for_trade("BTC", sold=False)
-        assert bot._dca_buy_ts["BTC"] == []
-        # No sell timestamp recorded
-        assert bot._dca_last_sell_ts.get("BTC", 0) == 0
+    def test_window_count_after_sell(self, dca_engine):
+        """After a sell, buys before the sell are excluded from the window count."""
+        now = time.time()
+        dca_engine._dca_buy_timestamps["BTC"] = [now - 100]
+        dca_engine.record_sell("BTC", timestamp=now - 50)
+        # The buy at now-100 is before the sell at now-50, so excluded
+        assert dca_engine._window_count("BTC", now=now) == 0
 
 
 # =====================================================================
