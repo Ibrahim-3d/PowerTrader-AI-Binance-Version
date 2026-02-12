@@ -6,14 +6,11 @@ It preserves the original CLI interface so existing Hub configurations
 continue to work identically.
 
 The original monolithic script is archived in ``legacy/pt_thinker.py``.
-
-Usage::
-
-    python pt_thinker.py
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -42,31 +39,56 @@ def _ensure_importable() -> None:
             sys.path.insert(0, src)
 
 
-_ensure_importable()
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="PowerTrader Thinker — continuous signal generator.",
+        epilog="Generates LONG/SHORT signals per coin by comparing live prices\n"
+               "against trained pattern memories. Runs continuously until stopped.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--hub-dir", default=None,
+        help="Hub data directory (overrides POWERTRADER_HUB_DIR env var).",
+    )
+    return parser.parse_args()
 
-from powertrader.core.config import TradingConfig  # noqa: E402
-from powertrader.core.constants import SETTINGS_FILENAME  # noqa: E402
-from powertrader.core.logging_setup import setup_logger  # noqa: E402
-from powertrader.core.market_client import KuCoinMarketClient  # noqa: E402
-from powertrader.core.storage import FileStore  # noqa: E402
-from powertrader.thinker.runner import ThinkerRunner  # noqa: E402
 
-# ---------------------------------------------------------------------------
-# Set up and run
-# ---------------------------------------------------------------------------
-_project_root = _find_project_root() or Path.cwd()
+def main() -> None:
+    _ensure_importable()
 
-setup_logger("thinker", _project_root / "logs")
-setup_logger("powertrader", _project_root / "logs")
+    import os
 
-_config = TradingConfig.from_file(_project_root / SETTINGS_FILENAME)
-_market = KuCoinMarketClient()
-_store = FileStore()
+    from powertrader.core.config import TradingConfig
+    from powertrader.core.constants import SETTINGS_FILENAME
+    from powertrader.core.logging_setup import setup_logger
+    from powertrader.core.market_client import KuCoinMarketClient
+    from powertrader.core.storage import FileStore
+    from powertrader.thinker.runner import ThinkerRunner
 
-_runner = ThinkerRunner(
-    market=_market,
-    config=_config,
-    store=_store,
-    base_dir=_project_root,
-)
-_runner.run()
+    args = _parse_args()
+    project_root = _find_project_root() or Path.cwd()
+
+    setup_logger("thinker", project_root / "logs")
+    setup_logger("powertrader", project_root / "logs")
+
+    config = TradingConfig.from_file(project_root / SETTINGS_FILENAME)
+    market = KuCoinMarketClient()
+    store = FileStore()
+
+    if args.hub_dir:
+        hub_dir = Path(args.hub_dir)
+    else:
+        hub_dir = Path(os.environ.get("POWERTRADER_HUB_DIR", str(project_root / "hub_data")))
+
+    runner = ThinkerRunner(
+        market=market,
+        config=config,
+        store=store,
+        base_dir=project_root,
+        hub_dir=hub_dir,
+    )
+    runner.run()
+
+
+if __name__ == "__main__":
+    main()

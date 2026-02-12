@@ -66,6 +66,7 @@ class TraderRunner:
         store: FileStore,
         base_dir: Path,
         health: HealthMonitor | None = None,
+        hub_dir: Path | None = None,
     ) -> None:
         self._client = trading_client
         self._entry = entry
@@ -75,7 +76,7 @@ class TraderRunner:
         self._store = store
         self._base_dir = base_dir
         self._health = health
-        self._hub_dir = base_dir / _HUB_DATA_DIR
+        self._hub_dir = hub_dir or (base_dir / _HUB_DATA_DIR)
         self._coin_paths = build_coin_paths(base_dir, config.coins)
         self._positions: dict[str, Position] = {}
         self._running = True
@@ -109,23 +110,26 @@ class TraderRunner:
     def step(self) -> None:
         """One iteration: evaluate all positions and potential entries."""
         # Fetch current prices for all coins
-        prices = self._client.get_current_prices(list(self._coin_paths.keys()))
+        coins = list(self._coin_paths.keys())
+        prices = self._client.get_current_prices(coins)
         if not prices:
-            logger.debug("No prices available, skipping iteration")
+            logger.warning("No prices available for %d coins, skipping iteration", len(coins))
             return
 
         # Sync positions from exchange holdings
         self._sync_positions(prices)
 
         # Calculate total account value
-        account_value = self._calculate_account_value(prices)
+        account_info = self._calculate_account_value(prices)
+        account_value = account_info.get("total_account_value", 0.0)
+        buying_power = account_info.get("buying_power", 0.0)
 
         # Manage existing positions (exits and DCA)
         for coin in list(self._positions.keys()):
             price = prices.get(coin)
             if price is None or price <= 0:
                 continue
-            self._manage_position(coin, price)
+            self._manage_position(coin, price, buying_power)
 
         # Check for new entries
         held_coins = set(self._positions.keys())
@@ -135,10 +139,20 @@ class TraderRunner:
             price = prices.get(coin)
             if price is None or price <= 0:
                 continue
-            self._check_entry(coin, paths, price, account_value)
+            self._check_entry(coin, paths, price, account_value, buying_power)
 
         # Write status for hub GUI
-        self._write_status(prices, account_value)
+        self._write_status(prices, account_info)
+
+        # Log first successful iteration so user knows it's working
+        if not getattr(self, "_first_step_logged", False):
+            logger.info(
+                "First status written — account value: $%.2f, positions: %d, prices: %d coins",
+                account_info.get("total_account_value", 0.0),
+                len(self._positions),
+                len(prices),
+            )
+            self._first_step_logged = True
 
     def stop(self) -> None:
         """Request the runner to stop after the current iteration."""
@@ -190,7 +204,7 @@ class TraderRunner:
 
     # -- position management --------------------------------------------------
 
-    def _manage_position(self, coin: str, current_price: float) -> None:
+    def _manage_position(self, coin: str, current_price: float, buying_power: float) -> None:
         """Manage an existing position: check exit and DCA."""
         position = self._positions.get(coin)
         if position is None:
@@ -218,7 +232,7 @@ class TraderRunner:
         )
         if should_buy:
             amount = self._dca.calculate_dca_amount(position, current_price)
-            self._execute_dca(coin, position, current_price, amount, reason)
+            self._execute_dca(coin, position, current_price, amount, reason, buying_power)
 
     def _check_entry(
         self,
@@ -226,6 +240,7 @@ class TraderRunner:
         paths: CoinPaths,
         current_price: float,
         account_value: float,
+        buying_power: float,
     ) -> None:
         """Check if we should enter a new position for this coin."""
         signal = self._read_signals(coin, paths)
@@ -235,6 +250,15 @@ class TraderRunner:
 
         entry_size = self._entry.calculate_entry_size(account_value)
         if entry_size <= 0:
+            return
+
+        if buying_power < entry_size:
+            logger.debug(
+                "Skipping entry for %s: need $%.2f, have $%.2f USDT",
+                coin,
+                entry_size,
+                buying_power,
+            )
             return
 
         logger.info(
@@ -316,8 +340,19 @@ class TraderRunner:
         current_price: float,
         amount: float,
         reason: str,
+        buying_power: float,
     ) -> None:
         """Execute a DCA buy."""
+        if buying_power < amount:
+            logger.info(
+                "Skipping DCA for %s: need $%.2f, have $%.2f USDT (reason=%s)",
+                coin,
+                amount,
+                buying_power,
+                reason,
+            )
+            return
+
         logger.info(
             "DCA buy for %s: reason=%s, amount=$%.2f at %.4f",
             coin,
@@ -387,25 +422,54 @@ class TraderRunner:
 
     # -- account value --------------------------------------------------------
 
-    def _calculate_account_value(self, prices: dict[str, float]) -> float:
-        """Calculate total account value (USDT + holdings)."""
+    def _calculate_account_value(self, prices: dict[str, float]) -> dict[str, float]:
+        """Calculate total account value breakdown (USDT + holdings).
+
+        Fetches prices for any held coins not already in *prices* so that
+        the full account value is calculated accurately.
+
+        Returns a dict with keys: total_account_value, buying_power,
+        holdings_sell_value, percent_in_trade.
+        """
         try:
             balances = self._client.get_account_balance()
         except (ExchangeError, OSError, ConnectionError) as exc:
             logger.error("Failed to fetch account balance: %s", exc)
-            return 0.0
+            return {"total_account_value": 0.0, "buying_power": 0.0,
+                    "holdings_sell_value": 0.0, "percent_in_trade": 0.0}
         except (RuntimeError, ValueError, TypeError, KeyError) as exc:
             logger.error("Unexpected error fetching balance: %s", exc, exc_info=True)
-            return 0.0
+            return {"total_account_value": 0.0, "buying_power": 0.0,
+                    "holdings_sell_value": 0.0, "percent_in_trade": 0.0}
 
-        total = balances.get(QUOTE_ASSET, 0.0)
+        # Fetch prices for held coins not already in the price dict
+        missing_coins = [
+            c for c in balances
+            if c != QUOTE_ASSET and c not in prices and balances[c] > 0
+        ]
+        if missing_coins:
+            extra_prices = self._client.get_current_prices(missing_coins)
+            all_prices = {**prices, **extra_prices}
+        else:
+            all_prices = prices
+
+        buying_power = balances.get(QUOTE_ASSET, 0.0)
+        holdings_value = 0.0
         for coin, qty in balances.items():
             if coin == QUOTE_ASSET:
                 continue
-            price = prices.get(coin, 0.0)
-            total += qty * price
+            price = all_prices.get(coin, 0.0)
+            holdings_value += qty * price
 
-        return total
+        total = buying_power + holdings_value
+        pct_in_trade = (holdings_value / total * 100.0) if total > 0 else 0.0
+
+        return {
+            "total_account_value": total,
+            "buying_power": buying_power,
+            "holdings_sell_value": holdings_value,
+            "percent_in_trade": pct_in_trade,
+        }
 
     # -- trade recording ------------------------------------------------------
 
@@ -419,7 +483,7 @@ class TraderRunner:
 
     # -- status writing -------------------------------------------------------
 
-    def _write_status(self, prices: dict[str, float], account_value: float) -> None:
+    def _write_status(self, prices: dict[str, float], account_info: dict[str, float]) -> None:
         """Write trader status for the hub GUI."""
         self._hub_dir.mkdir(parents=True, exist_ok=True)
 
@@ -439,7 +503,7 @@ class TraderRunner:
             }
 
         status = {
-            "account_value": account_value,
+            "account": account_info,
             "positions": positions_data,
             "coins": list(self._coin_paths.keys()),
             "timestamp": time.time(),
@@ -447,8 +511,8 @@ class TraderRunner:
 
         self._store.write_json(self._hub_dir / _STATUS_FILENAME, status)
 
-        # Append account value snapshot
+        # Append account value snapshot (keys must match hub/components/account_chart.py)
         self._store.append_jsonl(
             self._hub_dir / _ACCOUNT_VALUE_FILENAME,
-            {"value": account_value, "timestamp": time.time()},
+            {"ts": time.time(), "total_account_value": account_info.get("total_account_value", 0.0)},
         )

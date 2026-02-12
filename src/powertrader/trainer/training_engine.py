@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+import numpy as np
+
 from powertrader.core.constants import (
     TRAINER_CANDLE_PATTERN_LENGTH,
     TRAINER_INITIAL_THRESHOLD,
@@ -110,6 +112,7 @@ def adjust_weights(
     5. Adjust weights: +0.25 if prediction was too conservative, -0.25 if too aggressive
     6. Self-tune threshold to maintain ~20 matches per position
 
+    Uses numpy-vectorized distance computation for performance.
     Returns the updated memory (modified in-place and returned).
     """
     n = len(close_pcts)
@@ -118,111 +121,124 @@ def adjust_weights(
 
     total_positions = n - pattern_length - 1
     threshold = memory.threshold
+    mem_size = memory.size
+
+    # Pre-convert memory patterns to numpy array for vectorized matching
+    pat_arr = np.array(memory.patterns, dtype=np.float64)        # (M, pattern_length)
+    hd_arr = np.array(memory.high_diffs, dtype=np.float64)       # (M,)
+    ld_arr = np.array(memory.low_diffs, dtype=np.float64)        # (M,)
+    wh_arr = np.array(memory.weights_high, dtype=np.float64)     # (M,)
+    wl_arr = np.array(memory.weights_low, dtype=np.float64)      # (M,)
+    wc_arr = np.array(memory.weights, dtype=np.float64)          # (M,)
+    # Last element of each pattern = close move for prediction
+    cm_arr = pat_arr[:, -1] if pat_arr.shape[1] > 0 else np.zeros(mem_size)
+
+    close_arr = np.array(close_pcts, dtype=np.float64)
+    high_arr = np.array(high_pcts, dtype=np.float64)
+    low_arr = np.array(low_pcts, dtype=np.float64)
+
+    logger.info(
+        "Adjusting weights: %d positions x %d patterns (threshold=%.4f)",
+        total_positions, mem_size, threshold,
+    )
 
     for pos in range(total_positions):
-        # Build current pattern
-        current = close_pcts[pos : pos + pattern_length]
+        # Build current pattern as numpy array
+        cur = close_arr[pos : pos + pattern_length]  # (pattern_length,)
 
-        # Find matches
-        matches: list[int] = []
-        for idx, stored in enumerate(memory.patterns):
-            if not stored:
-                continue
-            pat_n = min(len(current), len(stored))
-            if pat_n == 0:
-                continue
-            total_diff = 0.0
-            for j in range(pat_n):
-                total_diff += pattern_distance(current[j], stored[j])
-            avg_diff = total_diff / pat_n
-            if avg_diff <= threshold:
-                matches.append(idx)
+        # Vectorized pattern distance: |a-b| / |avg(a,b)| * 100
+        diff = np.abs(pat_arr - cur)                    # (M, pattern_length)
+        avg_abs = np.abs((pat_arr + cur) / 2.0)         # (M, pattern_length)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            dists = np.where(avg_abs == 0.0, 0.0, diff / avg_abs * 100.0)
+        avg_dists = dists.mean(axis=1)                   # (M,)
+
+        match_mask = avg_dists <= threshold
+        match_count = int(match_mask.sum())
 
         # Self-tune threshold to target ~20 matches
-        if len(matches) > WEIGHT_MATCH_THRESHOLD:
+        if match_count > WEIGHT_MATCH_THRESHOLD:
             step = WEIGHT_STEP_SMALL if threshold < 0.1 else WEIGHT_STEP_LARGE
             threshold = max(0.0, threshold - step)
         else:
             step = WEIGHT_STEP_SMALL if threshold < 0.1 else WEIGHT_STEP_LARGE
             threshold = min(TRAINER_MAX_THRESHOLD, threshold + step)
 
-        if not matches:
+        if match_count == 0:
             if on_progress and pos % 200 == 0:
                 on_progress(pos, total_positions)
             continue
 
-        # Compute weighted predictions from matches
-        h_moves: list[float] = []
-        l_moves: list[float] = []
-        c_moves: list[float] = []
+        # Compute weighted predictions from matches (vectorized)
+        m_wh = wh_arr[match_mask]
+        m_wl = wl_arr[match_mask]
+        m_wc = wc_arr[match_mask]
+        m_hd = hd_arr[match_mask]
+        m_ld = ld_arr[match_mask]
+        m_cm = cm_arr[match_mask]
 
-        for idx in matches:
-            h_w = memory.weights_high[idx] if idx < len(memory.weights_high) else 1.0
-            l_w = memory.weights_low[idx] if idx < len(memory.weights_low) else 1.0
-            c_w = memory.weights[idx] if idx < len(memory.weights) else 1.0
+        h_nz = m_wh != 0.0
+        l_nz = m_wl != 0.0
+        c_nz = m_wc != 0.0
 
-            h_diff = memory.high_diffs[idx] if idx < len(memory.high_diffs) else 0.0
-            l_diff = memory.low_diffs[idx] if idx < len(memory.low_diffs) else 0.0
-            pat = memory.patterns[idx] if idx < len(memory.patterns) else []
-            c_move = pat[-1] if pat else 0.0
+        h_cnt = int(h_nz.sum())
+        l_cnt = int(l_nz.sum())
+        c_cnt = int(c_nz.sum())
 
-            if h_w != 0.0:
-                h_moves.append(h_diff * h_w)
-            if l_w != 0.0:
-                l_moves.append(l_diff * l_w)
-            if c_w != 0.0:
-                c_moves.append(c_move * c_w)
-
-        if not h_moves and not l_moves and not c_moves:
+        if h_cnt == 0 and l_cnt == 0 and c_cnt == 0:
             if on_progress and pos % 200 == 0:
                 on_progress(pos, total_positions)
             continue
 
-        h_pred = sum(h_moves) / len(h_moves) if h_moves else 0.0
-        l_pred = sum(l_moves) / len(l_moves) if l_moves else 0.0
-        c_pred = sum(c_moves) / len(c_moves) if c_moves else 0.0
+        h_pred = float((m_hd[h_nz] * m_wh[h_nz]).sum() / h_cnt) if h_cnt else 0.0
+        l_pred = float((m_ld[l_nz] * m_wl[l_nz]).sum() / l_cnt) if l_cnt else 0.0
+        c_pred = float((m_cm[c_nz] * m_wc[c_nz]).sum() / c_cnt) if c_cnt else 0.0
 
         # Actual values for the target candle
         target_idx = pos + pattern_length
-        actual_close = close_pcts[target_idx] if target_idx < n else 0.0
-        actual_high = high_pcts[target_idx] / 100.0 if target_idx < len(high_pcts) else 0.0
-        actual_low = low_pcts[target_idx] / 100.0 if target_idx < len(low_pcts) else 0.0
+        actual_close = float(close_arr[target_idx]) if target_idx < n else 0.0
+        actual_high = float(high_arr[target_idx]) / 100.0 if target_idx < n else 0.0
+        actual_low = float(low_arr[target_idx]) / 100.0 if target_idx < n else 0.0
 
-        # Adjust weights for each matched pattern
-        tolerance = 0.1  # 10% accuracy margin
-        for idx in matches:
-            # --- High weight ---
-            if idx < len(memory.weights_high):
-                hw = memory.weights_high[idx]
-                if h_pred != 0.0:
-                    if actual_high > h_pred + abs(h_pred * tolerance):
-                        hw = min(WEIGHT_MAX, hw + WEIGHT_ADJUST_INCREMENT)
-                    elif actual_high < h_pred - abs(h_pred * tolerance):
-                        hw = max(0.0, hw - WEIGHT_ADJUST_INCREMENT)
-                memory.weights_high[idx] = hw
+        # Vectorized weight adjustment for matched patterns
+        match_idxs = np.nonzero(match_mask)[0]
+        tolerance = 0.1
 
-            # --- Low weight ---
-            if idx < len(memory.weights_low):
-                lw = memory.weights_low[idx]
-                if l_pred != 0.0:
-                    if actual_low < l_pred - abs(l_pred * tolerance):
-                        lw = min(WEIGHT_MAX, lw + WEIGHT_ADJUST_INCREMENT)
-                    elif actual_low > l_pred + abs(l_pred * tolerance):
-                        lw = max(0.0, lw - WEIGHT_ADJUST_INCREMENT)
-                memory.weights_low[idx] = lw
+        # --- High weights ---
+        if h_pred != 0.0:
+            h_tol = abs(h_pred * tolerance)
+            if actual_high > h_pred + h_tol:
+                wh_arr[match_idxs] = np.minimum(WEIGHT_MAX, wh_arr[match_idxs] + WEIGHT_ADJUST_INCREMENT)
+            elif actual_high < h_pred - h_tol:
+                wh_arr[match_idxs] = np.maximum(0.0, wh_arr[match_idxs] - WEIGHT_ADJUST_INCREMENT)
 
-            # --- Close weight ---
-            if idx < len(memory.weights):
-                cw = memory.weights[idx]
-                if c_pred != 0.0:
-                    if actual_close > c_pred + abs(c_pred * tolerance):
-                        cw = min(WEIGHT_MAX, cw + WEIGHT_ADJUST_INCREMENT)
-                    elif actual_close < c_pred - abs(c_pred * tolerance):
-                        cw = max(WEIGHT_MIN_NEUTRAL, cw - WEIGHT_ADJUST_INCREMENT)
-                memory.weights[idx] = cw
+        # --- Low weights ---
+        if l_pred != 0.0:
+            l_tol = abs(l_pred * tolerance)
+            if actual_low < l_pred - l_tol:
+                wl_arr[match_idxs] = np.minimum(WEIGHT_MAX, wl_arr[match_idxs] + WEIGHT_ADJUST_INCREMENT)
+            elif actual_low > l_pred + l_tol:
+                wl_arr[match_idxs] = np.maximum(0.0, wl_arr[match_idxs] - WEIGHT_ADJUST_INCREMENT)
+
+        # --- Close weights ---
+        if c_pred != 0.0:
+            c_tol = abs(c_pred * tolerance)
+            if actual_close > c_pred + c_tol:
+                wc_arr[match_idxs] = np.minimum(WEIGHT_MAX, wc_arr[match_idxs] + WEIGHT_ADJUST_INCREMENT)
+            elif actual_close < c_pred - c_tol:
+                wc_arr[match_idxs] = np.maximum(WEIGHT_MIN_NEUTRAL, wc_arr[match_idxs] - WEIGHT_ADJUST_INCREMENT)
 
         if on_progress and pos % 200 == 0:
             on_progress(pos, total_positions)
 
+        # Log progress periodically
+        if pos % 5000 == 0 and pos > 0:
+            pct = pos / total_positions * 100
+            logger.info("  weight adjustment: %d/%d (%.1f%%)", pos, total_positions, pct)
+
+    # Copy numpy arrays back to memory lists
+    memory.weights_high[:] = wh_arr.tolist()
+    memory.weights_low[:] = wl_arr.tolist()
+    memory.weights[:] = wc_arr.tolist()
     memory.threshold = threshold
     return memory

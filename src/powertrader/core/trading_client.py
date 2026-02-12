@@ -118,13 +118,23 @@ class BinanceTradingClient(TradingClient):
         self._rate_limiter.acquire()
         acct = self._client.get_account()  # type: ignore[union-attr]
         result: dict[str, float] = {}
-        for bal in acct.get("balances", []):
+        balances_raw = acct.get("balances", [])
+        for bal in balances_raw:
             asset = bal.get("asset", "")
             free = float(bal.get("free", 0.0) or 0.0)
             locked = float(bal.get("locked", 0.0) or 0.0)
             total = free + locked
             if total > 0:
                 result[asset] = total
+        if not result:
+            logger.warning(
+                "Binance account returned 0 non-zero balances (raw response had %d assets). "
+                "Check API key permissions (needs 'Enable Reading') and account funding.",
+                len(balances_raw),
+            )
+        elif not getattr(self, "_balance_logged", False):
+            logger.info("Account balances: %s", {k: f"{v:.4f}" for k, v in result.items()})
+            self._balance_logged = True
         return result
 
     @retry(max_retries=2, base_delay=2.0)
@@ -215,7 +225,7 @@ class BinanceTradingClient(TradingClient):
         )
 
         client_order_id = str(uuid.uuid4())
-        qty_str = f"{quantity}"
+        qty_str = self._format_quantity(symbol, quantity)
         try:
             self._rate_limiter.acquire()
             if side == "BUY":
@@ -319,6 +329,13 @@ class BinanceTradingClient(TradingClient):
         if rounded < float(min_qty):
             return 0.0
         return rounded
+
+    def _format_quantity(self, symbol: str, quantity: float) -> str:
+        """Format quantity as decimal string, never scientific notation."""
+        lot = self._get_lot_size(symbol)
+        d_step = Decimal(lot["stepSize"])
+        precision = max(0, -d_step.as_tuple().exponent)
+        return f"{quantity:.{precision}f}"
 
     # -- price helpers --------------------------------------------------------
 

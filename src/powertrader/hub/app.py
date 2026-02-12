@@ -13,10 +13,12 @@ import logging
 import os
 import queue
 import shutil
+import threading
 import time
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk, messagebox
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
@@ -120,6 +122,9 @@ class PowerTraderHub(tk.Tk):
 
         self._last_chart_refresh = 0.0
 
+        # Fetch account info from Binance in background so labels show immediately
+        self._start_account_prefetch()
+
         if bool(self.settings.get("auto_start_scripts", False)):
             self.start_all_scripts()
 
@@ -131,11 +136,18 @@ class PowerTraderHub(tk.Tk):
     def _load_settings(self) -> dict:
         settings_path = os.path.join(self.project_dir, SETTINGS_FILE)
         data = safe_read_json(settings_path)
-        if not isinstance(data, dict):
+        first_run = not isinstance(data, dict)
+        if first_run:
             data = {}
         merged = dict(DEFAULT_SETTINGS)
         merged.update(data)
         merged["coins"] = [c.upper().strip() for c in merged.get("coins", [])]
+        # Auto-save on first run so child processes can find gui_settings.json
+        if first_run:
+            try:
+                safe_write_json(settings_path, merged)
+            except OSError as exc:
+                logger.debug("Failed to write initial settings: %s", exc)
         return merged
 
     def _save_settings(self) -> None:
@@ -456,8 +468,9 @@ class PowerTraderHub(tk.Tk):
 
         def _sync_train_coin(*_):
             try:
-                self.trainer_coin_var.set(self.train_coin_var.get())
-            except tk.TclError as exc:
+                if hasattr(self, "trainer_coin_var"):
+                    self.trainer_coin_var.set(self.train_coin_var.get())
+            except (tk.TclError, AttributeError) as exc:
                 logger.debug("Failed to sync train coin var: %s", exc)
 
         self.train_coin_combo.bind("<<ComboboxSelected>>", _sync_train_coin)
@@ -1195,6 +1208,7 @@ class PowerTraderHub(tk.Tk):
             logger.debug("Failed to refresh training progress: %s", exc)
 
         self._refresh_neural_overview()
+        self._check_account_prefetch()
         self._refresh_trader_status()
         self._refresh_health_dashboard(neural_running, trader_running)
         self._refresh_pnl()
@@ -1308,6 +1322,87 @@ class PowerTraderHub(tk.Tk):
                 self.training_progress_bar["value"] = avg_pct
         except (tk.TclError, OSError, ValueError, TypeError) as exc:
             logger.debug("Failed to refresh training progress bar: %s", exc)
+
+    # ---- account prefetch (background) ----
+
+    def _start_account_prefetch(self) -> None:
+        """Kick off a background thread to fetch account info from Binance.
+
+        Only runs if trader_status.json is missing or stale (>60s old).
+        """
+        self._acct_prefetch_q: queue.Queue[dict] = queue.Queue()
+        self._acct_prefetch_done = False
+
+        try:
+            mtime = os.path.getmtime(self.trader_status_path)
+            if (time.time() - mtime) < 60:
+                self._acct_prefetch_done = True
+                return
+        except OSError:
+            pass
+
+        t = threading.Thread(target=self._fetch_initial_account_info, daemon=True)
+        t.start()
+
+    def _fetch_initial_account_info(self) -> None:
+        """Fetch account balance/holdings from Binance (runs in background thread)."""
+        try:
+            from powertrader.core.credentials import BinanceCredentials
+            from powertrader.core.constants import QUOTE_ASSET
+
+            creds = BinanceCredentials.load(Path(self.project_dir))
+            if not creds.is_valid:
+                logger.debug("No valid credentials for account prefetch")
+                return
+
+            from powertrader.core.trading_client import BinanceTradingClient
+
+            client = BinanceTradingClient(creds)
+            balances = client.get_account_balance()
+            prices = client.get_current_prices(self.coins)
+
+            buying_power = balances.get(QUOTE_ASSET, 0.0)
+            holdings_value = 0.0
+            for coin, qty in balances.items():
+                if coin == QUOTE_ASSET:
+                    continue
+                price = prices.get(coin, 0.0)
+                holdings_value += qty * price
+
+            total = buying_power + holdings_value
+            pct_in_trade = (holdings_value / total * 100.0) if total > 0 else 0.0
+
+            status = {
+                "account": {
+                    "total_account_value": total,
+                    "buying_power": buying_power,
+                    "holdings_sell_value": holdings_value,
+                    "percent_in_trade": pct_in_trade,
+                },
+                "positions": {},
+                "coins": self.coins,
+                "timestamp": time.time(),
+            }
+
+            self._acct_prefetch_q.put(status)
+        except Exception as exc:
+            logger.debug("Account prefetch failed: %s", exc)
+
+    def _check_account_prefetch(self) -> None:
+        """Check if background prefetch produced results and write to status file."""
+        if self._acct_prefetch_done:
+            return
+        try:
+            status = self._acct_prefetch_q.get_nowait()
+        except queue.Empty:
+            return
+
+        self._acct_prefetch_done = True
+        try:
+            safe_write_json(self.trader_status_path, status)
+            self._last_trader_status_mtime = None  # force refresh on next tick
+        except OSError as exc:
+            logger.debug("Failed to write prefetched account status: %s", exc)
 
     def _refresh_trader_status(self) -> None:
         try:

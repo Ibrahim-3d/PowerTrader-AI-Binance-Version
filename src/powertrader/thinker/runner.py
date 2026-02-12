@@ -55,16 +55,19 @@ class ThinkerRunner:
         store: FileStore,
         base_dir: Path,
         health: HealthMonitor | None = None,
+        hub_dir: Path | None = None,
     ) -> None:
         self._market = market
         self._config = config
         self._store = store
         self._base_dir = base_dir
         self._health = health
+        self._hub_dir = hub_dir or (base_dir / "hub_data")
         self._coins: list[str] = list(config.coins)
         self._coin_paths: dict[str, CoinPaths] = build_coin_paths(base_dir, self._coins)
         self._settings_mtime: float = 0.0
         self._running = True
+        self._ready_signalled = False
 
     # -- public API -----------------------------------------------------------
 
@@ -77,7 +80,12 @@ class ThinkerRunner:
 
         while self._running:
             self._sync_coins_from_settings()
-            self.step()
+            signals = self.step()
+
+            # Signal readiness to the Hub after the first successful iteration
+            if not self._ready_signalled and signals:
+                self._signal_ready()
+
             time.sleep(_LOOP_SLEEP_SECONDS)
 
         logger.info("Thinker stopped")
@@ -248,6 +256,18 @@ class ThinkerRunner:
         """Write zero signals for an untrained or unavailable coin."""
         self._store.write_int_signal(paths.signal_long(), 0)
         self._store.write_int_signal(paths.signal_short(), 0)
+
+    # -- Hub readiness signal -------------------------------------------------
+
+    def _signal_ready(self) -> None:
+        """Write ``runner_ready.json`` so the Hub knows to start the trader."""
+        self._hub_dir.mkdir(parents=True, exist_ok=True)
+        self._store.write_json(
+            self._hub_dir / "runner_ready.json",
+            {"timestamp": time.time(), "ready": True, "stage": "running"},
+        )
+        self._ready_signalled = True
+        logger.info("Signalled ready to Hub (runner_ready.json)")
 
     # -- config hot-reload ----------------------------------------------------
 

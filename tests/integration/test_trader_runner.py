@@ -381,15 +381,19 @@ class TestTraderRunnerStatusOutput:
         status_path = base_dir / "hub_data" / "trader_status.json"
         status = store.read_json(status_path)
         assert status is not None
-        assert "account_value" in status
+        assert "account" in status
         assert "positions" in status
         assert "coins" in status
-        assert status["account_value"] > 0
+        acct = status["account"]
+        assert acct["total_account_value"] > 0
+        assert "buying_power" in acct
+        assert "holdings_sell_value" in acct
+        assert "percent_in_trade" in acct
 
     def test_writes_account_value_history(
         self, config: TradingConfig, store: FileStore, base_dir: Path
     ) -> None:
-        """Should append to account_value_history.jsonl."""
+        """Should append to account_value_history.jsonl with correct keys."""
         client = MockTradingClient(balance=10000.0, prices={"BTC": 50000.0, "ETH": 3000.0})
         runner = _make_runner(client, config, store, base_dir)
 
@@ -405,6 +409,14 @@ class TestTraderRunnerStatusOutput:
         assert history_path.exists()
         lines = history_path.read_text().strip().split("\n")
         assert len(lines) >= 2  # At least 2 snapshots
+
+        # Verify format matches what hub/components/account_chart.py expects
+        import json
+        record = json.loads(lines[0])
+        assert "ts" in record, "Missing 'ts' key — hub expects 'ts' not 'timestamp'"
+        assert "total_account_value" in record, "Missing 'total_account_value' key — hub expects this not 'value'"
+        assert record["total_account_value"] > 0
+        assert record["ts"] > 0
 
     def test_records_trades(self, store: FileStore, base_dir: Path) -> None:
         """Executed trades should be appended to trade_history.jsonl."""
@@ -466,6 +478,93 @@ class TestTraderRunnerEdgeCases:
         # Should not raise
         runner.step()
         assert "BTC" not in runner._positions
+
+
+class TestTraderRunnerBuyingPowerGuard:
+    """Test that entries and DCA are blocked when USDT is insufficient."""
+
+    def test_no_entry_when_zero_usdt(self, store: FileStore, base_dir: Path) -> None:
+        """Should NOT enter when USDT buying power is 0."""
+        config = TradingConfig(coins=["BTC"], start_allocation_pct=0.01)
+        # All funds in NEO, no USDT
+        client = MockTradingClient(
+            balance=0.0,
+            prices={"BTC": 50000.0, "NEO": 10.0},
+            holdings={"NEO": 17.66},
+        )
+        runner = _make_runner(client, config, store, base_dir)
+
+        btc_paths = CoinPaths(base_dir, "BTC")
+        _write_signals(store, btc_paths, long_level=5, short_level=0)
+
+        runner.step()
+
+        assert len(client.buy_calls) == 0
+
+    def test_no_entry_when_insufficient_usdt(self, store: FileStore, base_dir: Path) -> None:
+        """Should NOT enter when USDT < entry_size."""
+        config = TradingConfig(coins=["BTC"], start_allocation_pct=0.01)
+        # $1 USDT but entry_size would be ~$1.77 (1% of $176.60)
+        client = MockTradingClient(
+            balance=1.0,
+            prices={"BTC": 50000.0, "NEO": 10.0},
+            holdings={"NEO": 17.66},
+        )
+        runner = _make_runner(client, config, store, base_dir)
+
+        btc_paths = CoinPaths(base_dir, "BTC")
+        _write_signals(store, btc_paths, long_level=5, short_level=0)
+
+        runner.step()
+
+        assert len(client.buy_calls) == 0
+
+    def test_entry_when_sufficient_usdt(self, store: FileStore, base_dir: Path) -> None:
+        """Should enter when USDT >= entry_size."""
+        config = TradingConfig(coins=["BTC"], start_allocation_pct=0.005)
+        # $5000 USDT, entry_size ~$25 (0.5% of $5000)
+        client = MockTradingClient(
+            balance=5000.0,
+            prices={"BTC": 50000.0},
+        )
+        runner = _make_runner(client, config, store, base_dir)
+
+        btc_paths = CoinPaths(base_dir, "BTC")
+        _write_signals(store, btc_paths, long_level=5, short_level=0)
+
+        runner.step()
+
+        assert len(client.buy_calls) == 1
+
+    def test_no_dca_when_insufficient_usdt(self, store: FileStore, base_dir: Path) -> None:
+        """Should NOT DCA when USDT < DCA amount."""
+        config = TradingConfig(
+            coins=["BTC"],
+            dca_levels=[-2.5],
+            dca_multiplier=2.0,
+            max_dca_buys_per_24h=2,
+        )
+        # Only $1 USDT, DCA amount would be ~$97
+        client = MockTradingClient(
+            balance=1.0,
+            prices={"BTC": 48500.0},
+            holdings={"BTC": 0.001},
+        )
+        runner = _make_runner(client, config, store, base_dir)
+
+        btc_paths = CoinPaths(base_dir, "BTC")
+        _write_signals(store, btc_paths, long_level=3, short_level=0)
+
+        runner._positions["BTC"] = Position(
+            coin="BTC",
+            entry_price=50000.0,
+            quantity=0.001,
+            cost_basis_usd=50.0,
+        )
+
+        runner.step()
+
+        assert len(client.buy_calls) == 0
 
 
 class TestFileIPC:

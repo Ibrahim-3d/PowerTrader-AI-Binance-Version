@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 _CHECKPOINT_FILENAME = "trainer_checkpoint.json"
 _STATUS_FILENAME = "trainer_status.json"
+_PROGRESS_FILENAME = "trainer_progress.json"
+_TRAINING_TIME_FILENAME = "trainer_last_training_time.txt"
 
 
 class TrainerRunner:
@@ -144,6 +146,7 @@ class TrainerRunner:
     ) -> None:
         """Train one coin across all timeframes."""
         paths = self._coin_paths[coin]
+        tf_total = len(TIMEFRAMES)
         logger.info("Training %s (reprocess=%s, tf_start=%d)", coin, reprocess, tf_start)
 
         for tf_idx, timeframe in enumerate(TIMEFRAMES):
@@ -151,6 +154,7 @@ class TrainerRunner:
                 continue
 
             self._write_status("TRAINING", coin=coin, timeframe=timeframe)
+            self._write_progress(paths, timeframe, tf_idx, tf_total, pct=0.0)
             self._save_checkpoint(coin, tf_idx)
 
             # Check stop signal between timeframes
@@ -158,7 +162,7 @@ class TrainerRunner:
                 raise _StopTrainingError()
 
             try:
-                self._train_timeframe(coin, paths, timeframe, reprocess=reprocess)
+                self._train_timeframe(coin, paths, timeframe, tf_idx, tf_total, reprocess=reprocess)
             except _StopTrainingError:
                 raise
             except (TrainingError, OSError, ConnectionError) as exc:
@@ -172,6 +176,8 @@ class TrainerRunner:
                 if self._health:
                     self._health.record_error("trainer", exc)
 
+        # Mark coin as trained — write timestamp file for the Hub
+        self._write_training_time(paths)
         logger.info("Training complete for %s", coin)
 
     def _train_timeframe(
@@ -179,6 +185,8 @@ class TrainerRunner:
         coin: str,
         paths: CoinPaths,
         timeframe: str,
+        tf_idx: int = 0,
+        tf_total: int = 7,
         reprocess: bool = False,
     ) -> None:
         """Train one coin on one timeframe."""
@@ -216,13 +224,21 @@ class TrainerRunner:
 
         # Adjust weights with progress callback that checks stop signal
         iteration_count = 0
+        last_progress_write = 0.0
 
         def _progress(pos: int, total: int) -> None:
-            nonlocal iteration_count
+            nonlocal iteration_count, last_progress_write
             iteration_count += 1
 
             if self._on_progress:
                 self._on_progress(coin, timeframe, pos, total)
+
+            # Write progress file for Hub GUI (throttled: max once per 5 seconds)
+            now = time.time()
+            if total > 0 and (now - last_progress_write) >= 5.0:
+                last_progress_write = now
+                pct = pos / total * 100.0
+                self._write_progress(paths, timeframe, tf_idx, tf_total, pct)
 
             # Periodically check stop signal during weight adjustment
             if iteration_count % KILLER_CHECK_INTERVAL == 0 and self.should_stop():
@@ -230,7 +246,12 @@ class TrainerRunner:
                 self._save_memory(paths, timeframe, memory)
                 raise _StopTrainingError()
 
+        logger.info("Adjusting weights for %s/%s (%d patterns)...", coin, timeframe, memory.size)
+
         memory = adjust_weights(memory, close_pcts, high_pcts, low_pcts, on_progress=_progress)
+
+        # Mark timeframe 100% complete
+        self._write_progress(paths, timeframe, tf_idx, tf_total, 100.0)
 
         # Persist to disk
         self._save_memory(paths, timeframe, memory)
@@ -320,6 +341,28 @@ class TrainerRunner:
                 "timeframe": timeframe,
                 "timestamp": time.time(),
             },
+        )
+
+    def _write_progress(
+        self, paths: CoinPaths, timeframe: str, tf_idx: int, tf_total: int, pct: float
+    ) -> None:
+        """Write ``trainer_progress.json`` in the coin folder for Hub progress bar."""
+        self._store.write_json(
+            paths.base / _PROGRESS_FILENAME,
+            {
+                "timeframe": timeframe,
+                "tf_index": tf_idx,
+                "tf_total": tf_total,
+                "pct": round(pct, 1),
+                "timestamp": time.time(),
+            },
+        )
+
+    def _write_training_time(self, paths: CoinPaths) -> None:
+        """Write ``trainer_last_training_time.txt`` so the Hub knows the coin is trained."""
+        self._store.write_text(
+            paths.base / _TRAINING_TIME_FILENAME,
+            str(time.time()),
         )
 
 

@@ -138,3 +138,10 @@ LONG_ONOFF_FILENAME: str = "futures_long_onoff.txt"
 SHORT_ONOFF_FILENAME: str = "futures_short_onoff.txt"
 HIGH_BOUNDS_FILENAME: str = "high_bound_prices.html"
 LOW_BOUNDS_FILENAME: str = "low_bound_prices.html"
+
+# ---------------------------------------------------------------------------
+# Paper trading defaults
+# ---------------------------------------------------------------------------
+DEFAULT_TRADING_MODE: str = "live"  # "live" or "paper"
+VALID_TRADING_MODES: tuple[str, ...] = ("live", "paper")
+DEFAULT_PAPER_INITIAL_BALANCE: float = 10_000.0

@@ -6,16 +6,11 @@ It preserves the original CLI interface so existing Hub configurations
 and coin-subfolder copies continue to work identically.
 
 The original monolithic script is archived in ``legacy/pt_trainer.py``.
-
-Usage::
-
-    python pt_trainer.py                    # Train BTC (default)
-    python pt_trainer.py BTC                # Train a specific coin
-    python pt_trainer.py ETH reprocess_yes  # Retrain with full reprocessing
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -44,56 +39,87 @@ def _ensure_importable() -> None:
             sys.path.insert(0, src)
 
 
-_ensure_importable()
+def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments with backward-compatible positional support."""
+    parser = argparse.ArgumentParser(
+        description="PowerTrader Trainer — train prediction models per coin.",
+        epilog="Examples:\n"
+               "  python pt_trainer.py                    # Train BTC (default)\n"
+               "  python pt_trainer.py BTC                # Train a specific coin\n"
+               "  python pt_trainer.py ETH reprocess_yes  # Retrain with full reprocessing\n"
+               "  python pt_trainer.py --coin ETH --reprocess",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "coin_positional", nargs="?", default=None,
+        help="Coin to train (positional, e.g. BTC). Default: BTC",
+    )
+    parser.add_argument(
+        "reprocess_positional", nargs="?", default=None,
+        help="Legacy flag: reprocess_yes or reprocess_no",
+    )
+    parser.add_argument(
+        "--coin", default=None,
+        help="Coin to train (named arg). Overrides positional.",
+    )
+    parser.add_argument(
+        "--reprocess", action="store_true", default=False,
+        help="Full reprocessing of historical data.",
+    )
+    args = parser.parse_args()
 
-from powertrader.core.config import TradingConfig  # noqa: E402
-from powertrader.core.constants import SETTINGS_FILENAME  # noqa: E402
-from powertrader.core.logging_setup import setup_logger  # noqa: E402
-from powertrader.core.market_client import KuCoinMarketClient  # noqa: E402
-from powertrader.core.storage import FileStore  # noqa: E402
-from powertrader.trainer.runner import TrainerRunner  # noqa: E402
+    # Resolve coin: --coin flag takes priority, then positional, then default
+    if args.coin:
+        coin = args.coin.strip().upper()
+    elif args.coin_positional:
+        coin = args.coin_positional.strip().upper()
+    else:
+        coin = "BTC"
 
-# ---------------------------------------------------------------------------
-# Determine the project root and parse CLI args (same interface as original)
-# ---------------------------------------------------------------------------
-_project_root = _find_project_root() or Path.cwd()
+    # Resolve reprocess: --reprocess flag OR legacy positional
+    reprocess = args.reprocess
+    if args.reprocess_positional:
+        if args.reprocess_positional.lower() in ("reprocess_yes", "reprocess"):
+            reprocess = True
 
-# Parse args: [coin] [reprocess_yes|reprocess_no]
-_arg_coin = "BTC"
-_reprocess = False
+    args.resolved_coin = coin
+    args.resolved_reprocess = reprocess
+    return args
 
-try:
-    if len(sys.argv) > 1 and str(sys.argv[1]).strip():
-        _arg_coin = str(sys.argv[1]).strip().upper()
-except Exception:
-    _arg_coin = "BTC"
 
-for _a in sys.argv[2:]:
-    if _a.lower() in ("reprocess_yes", "reprocess"):
-        _reprocess = True
-    elif _a.lower() == "reprocess_no":
-        _reprocess = False
+def main() -> None:
+    _ensure_importable()
 
-# ---------------------------------------------------------------------------
-# Set up logging and run
-# ---------------------------------------------------------------------------
-setup_logger("trainer", _project_root / "logs")
-setup_logger("powertrader", _project_root / "logs")
+    from powertrader.core.config import TradingConfig
+    from powertrader.core.constants import SETTINGS_FILENAME
+    from powertrader.core.logging_setup import setup_logger
+    from powertrader.core.market_client import KuCoinMarketClient
+    from powertrader.core.storage import FileStore
+    from powertrader.trainer.runner import TrainerRunner
 
-_settings_path = _project_root / SETTINGS_FILENAME
-if _settings_path.is_file():
-    _config = TradingConfig.from_file(_settings_path)
-else:
-    # Fallback for when gui_settings.json doesn't exist yet
-    _config = TradingConfig.from_file(_settings_path)
+    args = _parse_args()
+    project_root = _find_project_root() or Path.cwd()
 
-_market = KuCoinMarketClient()
-_store = FileStore()
+    setup_logger("trainer", project_root / "logs")
+    setup_logger("powertrader", project_root / "logs")
 
-_runner = TrainerRunner(
-    market=_market,
-    config=_config,
-    store=_store,
-    base_dir=_project_root,
-)
-_runner.run(coins=[_arg_coin], reprocess=_reprocess)
+    settings_path = project_root / SETTINGS_FILENAME
+    if settings_path.is_file():
+        config = TradingConfig.from_file(settings_path)
+    else:
+        config = TradingConfig()
+
+    market = KuCoinMarketClient()
+    store = FileStore()
+
+    runner = TrainerRunner(
+        market=market,
+        config=config,
+        store=store,
+        base_dir=project_root,
+    )
+    runner.run(coins=[args.resolved_coin], reprocess=args.resolved_reprocess)
+
+
+if __name__ == "__main__":
+    main()

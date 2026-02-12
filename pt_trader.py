@@ -6,15 +6,11 @@ It preserves the original CLI interface so existing Hub configurations
 continue to work identically.
 
 The original monolithic script is archived in ``legacy/pt_trader.py``.
-
-Usage::
-
-    python pt_trader.py               # Live trading (Binance)
-    python pt_trader.py --paper       # Paper trading (simulated)
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -43,8 +39,29 @@ def _ensure_importable() -> None:
             sys.path.insert(0, src)
 
 
-if __name__ == "__main__":
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="PowerTrader Trade Executor — executes trades on Binance.",
+        epilog="Examples:\n"
+               "  python pt_trader.py               # Live trading (Binance)\n"
+               "  python pt_trader.py --paper        # Paper trading (simulated)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--paper", action="store_true", default=False,
+        help="Use paper trading (simulated orders, no real money).",
+    )
+    parser.add_argument(
+        "--hub-dir", default=None,
+        help="Hub data directory (overrides POWERTRADER_HUB_DIR env var).",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
     _ensure_importable()
+
+    import os
 
     from powertrader.core.config import TradingConfig
     from powertrader.core.constants import SETTINGS_FILENAME
@@ -57,49 +74,57 @@ if __name__ == "__main__":
     from powertrader.trader.runner import TraderRunner
     from powertrader.trader.trailing_engine import TrailingProfitEngine
 
-    _project_root = _find_project_root() or Path.cwd()
+    args = _parse_args()
+    project_root = _find_project_root() or Path.cwd()
 
-    setup_logger("trader", _project_root / "logs")
-    setup_logger("powertrader", _project_root / "logs")
+    setup_logger("trader", project_root / "logs")
+    setup_logger("powertrader", project_root / "logs")
 
-    _config = TradingConfig.from_file(_project_root / SETTINGS_FILENAME)
-    _store = FileStore()
+    config = TradingConfig.from_file(project_root / SETTINGS_FILENAME)
+    store = FileStore()
 
-    # Select trading client
-    _paper_mode = "--paper" in sys.argv
-    _client: TradingClient
+    if args.hub_dir:
+        hub_dir = Path(args.hub_dir)
+    else:
+        hub_dir = Path(os.environ.get("POWERTRADER_HUB_DIR", str(project_root / "hub_data")))
 
-    if _paper_mode:
+    client: TradingClient
+
+    if args.paper:
         from powertrader.core.market_client import KuCoinMarketClient
         from powertrader.core.paper_client import PaperTradingClient
 
-        _market = KuCoinMarketClient()
-        _client = PaperTradingClient(market=_market)
+        market = KuCoinMarketClient()
+        client = PaperTradingClient(market=market)
     else:
         from powertrader.core.trading_client import BinanceTradingClient
 
-        _creds = BinanceCredentials.load(_project_root)
-        if not _creds.is_valid:
+        creds = BinanceCredentials.load(project_root)
+        if not creds.is_valid:
             print("ERROR: No valid Binance credentials found.")
             print(
                 "Set BINANCE_API_KEY/BINANCE_API_SECRET env vars "
                 "or create b_key.txt/b_secret.txt"
             )
             sys.exit(1)
-        _client = BinanceTradingClient(_creds)
+        client = BinanceTradingClient(creds)
 
-    # Wire up engines
-    _entry = EntryEngine(_config)
-    _dca = DCAEngine(_config)
-    _trailing = TrailingProfitEngine(_config)
+    entry = EntryEngine(config)
+    dca = DCAEngine(config)
+    trailing = TrailingProfitEngine(config)
 
-    _runner = TraderRunner(
-        trading_client=_client,
-        entry=_entry,
-        dca=_dca,
-        trailing=_trailing,
-        config=_config,
-        store=_store,
-        base_dir=_project_root,
+    runner = TraderRunner(
+        trading_client=client,
+        entry=entry,
+        dca=dca,
+        trailing=trailing,
+        config=config,
+        store=store,
+        base_dir=project_root,
+        hub_dir=hub_dir,
     )
-    _runner.run()
+    runner.run()
+
+
+if __name__ == "__main__":
+    main()
