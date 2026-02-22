@@ -26,12 +26,22 @@ from nacl.signing import SigningKey
 from pt_credentials import get_credentials
 from pt_data_provider import get_data_provider
 
-# Universal data provider (supports 65+ exchanges, user configurable)
-data_provider = get_data_provider()
-if data_provider.is_available():
-    print(f"✓ Data provider: {data_provider.get_provider_info()}")
-else:
-    print("⚠ No data providers available")
+# Universal data provider (supports 66+ exchanges, user configurable)
+data_provider = None
+try:
+    data_provider = get_data_provider()
+    if data_provider and data_provider.is_available():
+        print(
+            f"SUCCESS: Data provider initialized with {data_provider.get_provider_info()}"
+        )
+    else:
+        print("WARNING: Data provider not fully available, using fallback mode")
+except Exception as e:
+    if os.environ.get("POWERTRADER_ENV") == "test":
+        print(f"INFO: Skipping data provider in test environment: {e}")
+    else:
+        print(f"WARNING: Data provider unavailable: {e}")
+    data_provider = None
 
 # -----------------------------
 # Robinhood market-data (current ASK), same source as rhcb.py trader:
@@ -529,10 +539,10 @@ def init_coin(sym: str):
         history_list = []
         while True:
             try:
-                if not data_provider.is_available():
+                if not data_provider or not data_provider.is_available():
                     raise RuntimeError("No data providers available")
                 history = (
-                    data_provider.get_kline_data(coin, tf_choices[ind])
+                    data_provider.get_historical_data(coin, tf_choices[ind])
                     .replace("]]", "], ")
                     .replace("[[", "[")
                 )
@@ -738,10 +748,10 @@ def step_coin(sym: str):
         history_list = []
         while True:
             try:
-                if not data_provider.is_available():
+                if not data_provider or not data_provider.is_available():
                     raise RuntimeError("No data providers available")
                 history = (
-                    data_provider.get_kline_data(coin, tf_choices[tf_choice_index])
+                    data_provider.get_historical_data(coin, tf_choices[tf_choice_index])
                     .replace("]]", "], ")
                     .replace("[[", "[")
                 )
@@ -1048,10 +1058,10 @@ def step_coin(sym: str):
             # update the_time snapshot (same as before)
             while True:
                 try:
-                    if not data_provider.is_available():
+                    if not data_provider or not data_provider.is_available():
                         raise RuntimeError("No data providers available")
                     history = (
-                        data_provider.get_kline_data(coin, tf_choices[inder])
+                        data_provider.get_historical_data(coin, tf_choices[inder])
                         .replace("]]", "], ")
                         .replace("[[", "[")
                     )
@@ -1428,10 +1438,12 @@ def step_coin(sym: str):
         while this_index_now < len(tf_update):
             while True:
                 try:
-                    if not data_provider.is_available():
+                    if not data_provider or not data_provider.is_available():
                         raise RuntimeError("No data providers available")
                     history = (
-                        data_provider.get_kline_data(coin, tf_choices[this_index_now])
+                        data_provider.get_historical_data(
+                            coin, tf_choices[this_index_now]
+                        )
                         .replace("]]", "], ")
                         .replace("[[", "[")
                     )
