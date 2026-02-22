@@ -62,7 +62,7 @@ python pt_hub.py
 
 ### Initial Setup Steps
 
-1. **Configure Exchanges**: Set up your KuCoin and Robinhood connections
+1. **Configure Exchanges**: Set up your preferred exchange connections from 65+ supported providers
 2. **Set Trading Parameters**: Configure your DCA strategy and risk limits
 3. **Fund Your Account**: Add funds to your Robinhood trading account
 4. **Start Monitoring**: Begin with paper trading to test your strategy

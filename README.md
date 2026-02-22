@@ -19,7 +19,7 @@ PowerTraderAI+ is a sophisticated cryptocurrency trading bot powered by artifici
 ### Quick Navigation
 - **[Getting Started](docs/getting-started/README.md)** - Installation and setup
 - **[User Guide](docs/user-guide/README.md)** - How to use the application
-- **[Exchange Setup](docs/exchanges/README.md)** - KuCoin and Robinhood configuration
+- **[Exchange Setup](docs/exchanges/README.md)** - 65+ cryptocurrency exchange configuration
 - **[Security Guide](docs/security/README.md)** - Security best practices
 - **[API Configuration](docs/api-configuration/README.md)** - Detailed API setup
 - **[Troubleshooting](docs/troubleshooting/README.md)** - Common issues and solutions
@@ -65,7 +65,7 @@ For detailed security practices, see the **[Security Guide](docs/security/README
 
 ### For New Users
 1. **[Install PowerTraderAI+](docs/getting-started/installation.md)** - Complete installation guide
-2. **[Set up Exchange Accounts](docs/exchanges/README.md)** - KuCoin & Robinhood setup
+2. **[Set up Exchange Accounts](docs/exchanges/README.md)** - 65+ exchange setup
 3. **[Configure API Keys](docs/api-configuration/README.md)** - Secure API configuration
 4. **[Start Trading](docs/user-guide/README.md)** - Learn to use the application
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-PowerTraderAI+ now supports **global multi-exchange trading** with unified management across 10+ major cryptocurrency exchanges. This system provides price comparison, automatic failover, regional compliance, and seamless credential management.
+PowerTraderAI+ now supports **global multi-exchange trading** with unified management across **65+ major cryptocurrency exchanges**. This system provides price comparison, automatic failover, regional compliance, and seamless credential management.
 
 ## 🌍 Supported Exchanges
 
