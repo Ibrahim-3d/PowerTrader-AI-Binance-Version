@@ -7,6 +7,8 @@ import hmac
 import json
 import linecache
 import logging
+
+# Third-party imports
 import os
 import sys
 import time
@@ -17,14 +19,23 @@ from typing import Any, Dict, List, Optional
 
 import psutil
 
-# Third-party imports
-from kucoin.client import Market
-
 # Local imports
 from pt_files import secure_write_json, secure_write_text, set_secure_permissions
 
-# Initialize market client
-market = Market(url="https://api.kucoin.com")
+# Conditional imports for CI/CD compatibility
+market = None
+try:
+    from kucoin.client import Market
+
+    # Initialize market client
+    market = Market(url="https://api.kucoin.com")
+except Exception as e:
+    # Skip kucoin in test environments or when package has issues
+    if os.environ.get("POWERTRADER_ENV") == "test":
+        print(f"ℹ Skipping KuCoin client in test environment: {e}")
+    else:
+        print(f"⚠ KuCoin client unavailable: {e}")
+    market = None
 
 """
 Neural network training module for PowerTraderAI+.
@@ -526,6 +537,8 @@ while True:
     while True:
         time.sleep(0.5)
         try:
+            if market is None:
+                raise RuntimeError("KuCoin market client unavailable")
             history = (
                 str(
                     market.get_kline(
@@ -623,6 +636,8 @@ while True:
         price_list.reverse()
         high_price_list.reverse()
         low_price_list.reverse()
+        if market is None:
+            raise RuntimeError("KuCoin market client unavailable")
         ticker_data = (
             str(market.get_ticker(coin_choice))
             .replace('"', "")
