@@ -18,24 +18,27 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import psutil
+from pt_data_provider import get_data_provider
 
 # Local imports
 from pt_files import secure_write_json, secure_write_text, set_secure_permissions
 
-# Conditional imports for CI/CD compatibility
-market = None
+# Universal data provider (supports 66+ exchanges, user configurable)
+data_provider = None
 try:
-    from kucoin.client import Market
-
-    # Initialize market client
-    market = Market(url="https://api.kucoin.com")
-except Exception as e:
-    # Skip kucoin in test environments or when package has issues
-    if os.environ.get("POWERTRADER_ENV") == "test":
-        print(f"ℹ Skipping KuCoin client in test environment: {e}")
+    data_provider = get_data_provider()
+    if data_provider and data_provider.is_available():
+        print(
+            f"SUCCESS: Trainer data provider initialized with {data_provider.get_provider_info()}"
+        )
     else:
-        print(f"⚠ KuCoin client unavailable: {e}")
-    market = None
+        print("WARNING: Trainer data provider not fully available, using fallback mode")
+except Exception as e:
+    if os.environ.get("POWERTRADER_ENV") == "test":
+        print(f"INFO: Skipping trainer data provider in test environment: {e}")
+    else:
+        print(f"WARNING: Trainer data provider unavailable: {e}")
+    data_provider = None
 
 """
 Neural network training module for PowerTraderAI+.
@@ -544,13 +547,11 @@ if __name__ == "__main__":
     while True:
         time.sleep(0.5)
         try:
-            if market is None:
-                raise RuntimeError("KuCoin market client unavailable")
+            if not data_provider or not data_provider.is_available():
+                raise RuntimeError("No data providers available")
             history = (
-                str(
-                    market.get_kline(
-                        coin_choice, timeframe, startAt=end_time, endAt=start_time
-                    )
+                data_provider.get_historical_data(
+                    coin_choice, timeframe, start_time=start_time, end_time=end_time
                 )
                 .replace("]]", "], ")
                 .replace("[[", "[")
@@ -643,10 +644,10 @@ if __name__ == "__main__":
         price_list.reverse()
         high_price_list.reverse()
         low_price_list.reverse()
-        if market is None:
-            raise RuntimeError("KuCoin market client unavailable")
+        if not data_provider or not data_provider.is_available():
+            raise RuntimeError("No data providers available")
         ticker_data = (
-            str(market.get_ticker(coin_choice))
+            data_provider.get_price_data(coin_choice)
             .replace('"', "")
             .replace("'", "")
             .replace("[", "")

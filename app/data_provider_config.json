@@ -1,0 +1,804 @@
+{
+  "data_source_preferences": {
+    "historical_data": "multi_exchange_aggregate",
+    "orderbook": "primary_exchange_only",
+    "price_feeds": "tier1_centralized",
+    "volume_data": "tier1_centralized"
+  },
+  "exchanges": {
+    "centralized": {
+      "tier1": {
+        "binance": {
+          "data_feeds": true,
+          "name": "Binance",
+          "regions": [
+            "GLOBAL",
+            "EU",
+            "ASIA",
+            "AFRICA_MENA"
+          ],
+          "reliability": "high",
+          "trading": true
+        },
+        "coinbase": {
+          "data_feeds": true,
+          "name": "Coinbase Pro",
+          "regions": [
+            "US",
+            "EU",
+            "UK",
+            "GLOBAL"
+          ],
+          "reliability": "high",
+          "trading": true
+        },
+        "kraken": {
+          "data_feeds": true,
+          "name": "Kraken",
+          "regions": [
+            "US",
+            "EU",
+            "UK",
+            "GLOBAL"
+          ],
+          "reliability": "high",
+          "trading": true
+        },
+        "kucoin": {
+          "data_feeds": true,
+          "name": "KuCoin",
+          "regions": [
+            "GLOBAL",
+            "ASIA",
+            "EU",
+            "AFRICA_MENA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "robinhood": {
+          "data_feeds": true,
+          "name": "Robinhood",
+          "regions": [
+            "US"
+          ],
+          "reliability": "high",
+          "trading": true
+        }
+      },
+      "tier2": {
+        "bitfinex": {
+          "data_feeds": true,
+          "name": "Bitfinex",
+          "regions": [
+            "GLOBAL",
+            "EU"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "bitflyer": {
+          "data_feeds": true,
+          "name": "bitFlyer",
+          "regions": [
+            "ASIA",
+            "US",
+            "EU"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "bitget": {
+          "data_feeds": true,
+          "name": "Bitget",
+          "regions": [
+            "GLOBAL",
+            "ASIA",
+            "AFRICA_MENA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "bithumb": {
+          "data_feeds": true,
+          "name": "Bithumb",
+          "regions": [
+            "ASIA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "bitpanda": {
+          "data_feeds": true,
+          "name": "Bitpanda",
+          "regions": [
+            "EU"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "bitso": {
+          "data_feeds": true,
+          "name": "Bitso",
+          "regions": [
+            "US"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "bitstamp": {
+          "data_feeds": true,
+          "name": "Bitstamp",
+          "regions": [
+            "EU",
+            "UK"
+          ],
+          "reliability": "high",
+          "trading": true
+        },
+        "bybit": {
+          "data_feeds": true,
+          "name": "Bybit",
+          "regions": [
+            "ASIA",
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "coincheck": {
+          "data_feeds": true,
+          "name": "Coincheck",
+          "regions": [
+            "ASIA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "crypto_com": {
+          "data_feeds": true,
+          "name": "Crypto.com",
+          "regions": [
+            "GLOBAL",
+            "ASIA",
+            "EU",
+            "US"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "etoro": {
+          "data_feeds": false,
+          "name": "eToro",
+          "regions": [
+            "EU",
+            "GLOBAL"
+          ],
+          "reliability": "low",
+          "trading": true
+        },
+        "ftx": {
+          "data_feeds": true,
+          "name": "FTX",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "low",
+          "status": "deprecated",
+          "trading": false
+        },
+        "gate": {
+          "data_feeds": true,
+          "name": "Gate.io",
+          "regions": [
+            "GLOBAL",
+            "ASIA",
+            "EU",
+            "AFRICA_MENA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "gemini": {
+          "data_feeds": true,
+          "name": "Gemini",
+          "regions": [
+            "US",
+            "UK"
+          ],
+          "reliability": "high",
+          "trading": true
+        },
+        "huobi": {
+          "data_feeds": true,
+          "name": "Huobi",
+          "regions": [
+            "ASIA",
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "mexc": {
+          "data_feeds": true,
+          "name": "MEXC",
+          "regions": [
+            "GLOBAL",
+            "ASIA",
+            "AFRICA_MENA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "okx": {
+          "data_feeds": true,
+          "name": "OKX",
+          "regions": [
+            "ASIA",
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "phemex": {
+          "data_feeds": true,
+          "name": "Phemex",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "upbit": {
+          "data_feeds": true,
+          "name": "Upbit",
+          "regions": [
+            "ASIA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        }
+      }
+    },
+    "cross_chain": {
+      "bridges": {
+        "across_protocol": {
+          "data_feeds": true,
+          "name": "Across Protocol",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "bridge"
+        },
+        "connext": {
+          "data_feeds": true,
+          "name": "Connext",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "bridge"
+        },
+        "hop_protocol": {
+          "data_feeds": true,
+          "name": "Hop Protocol",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "bridge"
+        },
+        "li_fi": {
+          "data_feeds": true,
+          "name": "Li.Fi",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "bridge"
+        },
+        "stargate": {
+          "data_feeds": true,
+          "name": "Stargate",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "bridge"
+        }
+      }
+    },
+    "defi_dex": {
+      "ethereum": {
+        "curve": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "Curve Finance",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "oneinch": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "1inch",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "uniswap": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "Uniswap V3",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "high",
+          "trading": true
+        }
+      },
+      "layer2": {
+        "arbitrum_one": {
+          "blockchain": "arbitrum",
+          "data_feeds": true,
+          "name": "Arbitrum One DEXs",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "optimism": {
+          "blockchain": "optimism",
+          "data_feeds": true,
+          "name": "Optimism DEXs",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "polygon": {
+          "blockchain": "polygon",
+          "data_feeds": true,
+          "name": "Polygon DEXs",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "quickswap": {
+          "blockchain": "polygon",
+          "data_feeds": true,
+          "name": "QuickSwap",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "raydium": {
+          "blockchain": "solana",
+          "data_feeds": true,
+          "name": "Raydium",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "sushiswap": {
+          "blockchain": "multi-chain",
+          "data_feeds": true,
+          "name": "SushiSwap",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "trader_joe": {
+          "blockchain": "avalanche",
+          "data_feeds": true,
+          "name": "Trader Joe",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true
+        }
+      }
+    },
+    "defi_lending": {
+      "ethereum": {
+        "aave": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "Aave",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "high",
+          "trading": false,
+          "type": "lending"
+        },
+        "compound": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "Compound",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "high",
+          "trading": false,
+          "type": "lending"
+        },
+        "maker": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "MakerDAO",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "high",
+          "trading": false,
+          "type": "lending"
+        },
+        "morpho": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "Morpho",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": false,
+          "type": "lending"
+        }
+      },
+      "staking": {
+        "lido_finance": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "Lido Finance",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "high",
+          "trading": false,
+          "type": "staking"
+        },
+        "marinade_finance": {
+          "blockchain": "solana",
+          "data_feeds": true,
+          "name": "Marinade Finance",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": false,
+          "type": "staking"
+        },
+        "rocket_pool": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "Rocket Pool",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": false,
+          "type": "staking"
+        },
+        "yearn_finance": {
+          "blockchain": "ethereum",
+          "data_feeds": true,
+          "name": "Yearn Finance",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": false,
+          "type": "yield"
+        }
+      }
+    },
+    "derivatives": {
+      "options": {
+        "deribit": {
+          "data_feeds": true,
+          "name": "Deribit",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "high",
+          "trading": true,
+          "type": "options"
+        },
+        "dopex": {
+          "data_feeds": true,
+          "name": "Dopex",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "options"
+        },
+        "lyra": {
+          "data_feeds": true,
+          "name": "Lyra",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "options"
+        }
+      },
+      "perpetuals": {
+        "dydx": {
+          "data_feeds": true,
+          "name": "dYdX",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "perpetuals"
+        },
+        "hyperliquid": {
+          "data_feeds": true,
+          "name": "Hyperliquid",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "perpetuals"
+        },
+        "perpetual_protocol": {
+          "data_feeds": true,
+          "name": "Perpetual Protocol",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "perpetuals"
+        }
+      },
+      "synthetics": {
+        "synthetix": {
+          "data_feeds": true,
+          "name": "Synthetix",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "synthetics"
+        }
+      }
+    },
+    "regional": {
+      "africa_mena": {
+        "quidax": {
+          "countries": [
+            "Nigeria"
+          ],
+          "data_feeds": true,
+          "name": "Quidax",
+          "regions": [
+            "AFRICA_MENA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "rain": {
+          "countries": [
+            "UAE",
+            "Saudi Arabia",
+            "Kuwait",
+            "Bahrain",
+            "Oman"
+          ],
+          "data_feeds": true,
+          "name": "Rain Exchange",
+          "regions": [
+            "AFRICA_MENA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "valr": {
+          "countries": [
+            "South Africa"
+          ],
+          "data_feeds": true,
+          "name": "VALR",
+          "regions": [
+            "AFRICA_MENA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        },
+        "yellow_card": {
+          "countries": [
+            "Nigeria",
+            "Ghana",
+            "Kenya",
+            "Uganda",
+            "South Africa",
+            "Zimbabwe"
+          ],
+          "data_feeds": true,
+          "name": "Yellow Card",
+          "regions": [
+            "AFRICA_MENA"
+          ],
+          "reliability": "medium",
+          "trading": true
+        }
+      }
+    },
+    "specialized": {
+      "nft_gaming": {
+        "blur": {
+          "data_feeds": true,
+          "name": "Blur",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "nft"
+        },
+        "immutable_x": {
+          "data_feeds": true,
+          "name": "Immutable X",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "nft"
+        },
+        "magic_eden": {
+          "data_feeds": true,
+          "name": "Magic Eden",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "nft"
+        },
+        "opensea": {
+          "data_feeds": true,
+          "name": "OpenSea",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "nft"
+        }
+      },
+      "p2p": {
+        "localbitcoins": {
+          "data_feeds": false,
+          "name": "LocalBitcoins",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "low",
+          "trading": true,
+          "type": "p2p"
+        },
+        "paxful": {
+          "data_feeds": false,
+          "name": "Paxful",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "p2p"
+        }
+      },
+      "prediction_markets": {
+        "augur": {
+          "data_feeds": true,
+          "name": "Augur",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "low",
+          "trading": true,
+          "type": "prediction"
+        },
+        "polymarket": {
+          "data_feeds": true,
+          "name": "Polymarket",
+          "regions": [
+            "GLOBAL"
+          ],
+          "reliability": "medium",
+          "trading": true,
+          "type": "prediction"
+        }
+      }
+    }
+  },
+  "fallback_strategy": "primary_to_secondary",
+  "priority_order": {
+    "AFRICA_MENA": [
+      "binance",
+      "kucoin",
+      "gate",
+      "mexc",
+      "bitget",
+      "rain",
+      "yellow_card",
+      "quidax",
+      "valr"
+    ],
+    "ASIA": [
+      "binance",
+      "kucoin",
+      "huobi",
+      "upbit",
+      "coincheck",
+      "gate",
+      "okx",
+      "bybit"
+    ],
+    "EU": [
+      "kraken",
+      "binance",
+      "coinbase",
+      "bitstamp",
+      "bitpanda",
+      "kucoin",
+      "gate"
+    ],
+    "GLOBAL": [
+      "binance",
+      "kraken",
+      "kucoin",
+      "coinbase",
+      "gate",
+      "mexc",
+      "bitget"
+    ],
+    "UK": [
+      "kraken",
+      "coinbase",
+      "binance",
+      "bitstamp",
+      "kucoin",
+      "gate"
+    ],
+    "US": [
+      "robinhood",
+      "coinbase",
+      "kraken",
+      "binance",
+      "kucoin",
+      "gemini",
+      "bitso"
+    ]
+  }
+}
