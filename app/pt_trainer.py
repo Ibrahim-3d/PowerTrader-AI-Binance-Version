@@ -7,6 +7,8 @@ import hmac
 import json
 import linecache
 import logging
+
+# Third-party imports
 import os
 import sys
 import time
@@ -17,14 +19,23 @@ from typing import Any, Dict, List, Optional
 
 import psutil
 
-# Third-party imports
-from kucoin.client import Market
-
 # Local imports
 from pt_files import secure_write_json, secure_write_text, set_secure_permissions
 
-# Initialize market client
-market = Market(url="https://api.kucoin.com")
+# Conditional imports for CI/CD compatibility
+market = None
+try:
+    from kucoin.client import Market
+
+    # Initialize market client
+    market = Market(url="https://api.kucoin.com")
+except Exception as e:
+    # Skip kucoin in test environments or when package has issues
+    if os.environ.get("POWERTRADER_ENV") == "test":
+        print(f"ℹ Skipping KuCoin client in test environment: {e}")
+    else:
+        print(f"⚠ KuCoin client unavailable: {e}")
+    market = None
 
 """
 Neural network training module for PowerTraderAI+.
@@ -180,7 +191,8 @@ def load_memory(tf_choice: str) -> Dict[str, Any]:
             .split("~")
         )
     except (FileNotFoundError, IOError) as e:
-        print(f"Warning: Could not load memories_{tf_choice}.txt: {e}")
+        if os.environ.get("POWERTRADER_ENV") != "test":
+            print(f"Warning: Could not load memories_{tf_choice}.txt: {e}")
         data["memory_list"] = []
 
     try:
@@ -194,7 +206,8 @@ def load_memory(tf_choice: str) -> Dict[str, Any]:
             .split(" ")
         )
     except (FileNotFoundError, IOError) as e:
-        print(f"Warning: Could not load memory_weights_{tf_choice}.txt: {e}")
+        if os.environ.get("POWERTRADER_ENV") != "test":
+            print(f"Warning: Could not load memory_weights_{tf_choice}.txt: {e}")
         data["weight_list"] = []
 
     try:
@@ -208,7 +221,8 @@ def load_memory(tf_choice: str) -> Dict[str, Any]:
             .split(" ")
         )
     except (FileNotFoundError, IOError) as e:
-        print(f"Warning: Could not load memory_weights_high_{tf_choice}.txt: {e}")
+        if os.environ.get("POWERTRADER_ENV") != "test":
+            print(f"Warning: Could not load memory_weights_high_{tf_choice}.txt: {e}")
         data["high_weight_list"] = []
 
     try:
@@ -222,7 +236,8 @@ def load_memory(tf_choice: str) -> Dict[str, Any]:
             .split(" ")
         )
     except (FileNotFoundError, IOError) as e:
-        print(f"Warning: Could not load memory_weights_low_{tf_choice}.txt: {e}")
+        if os.environ.get("POWERTRADER_ENV") != "test":
+            print(f"Warning: Could not load memory_weights_low_{tf_choice}.txt: {e}")
         data["low_weight_list"] = []
 
     _memory_cache[tf_choice] = data
@@ -362,7 +377,7 @@ except Exception:
 
 coin_choice = _arg_coin + "-USDT"
 
-restart_processing = True
+restart_processing = "y"  # Default to "yes" for processing
 
 # GUI reads this status file to know if this coin is TRAINING or FINISHED
 _trainer_started_at = int(time.time())
@@ -382,14 +397,17 @@ except Exception:
 
 
 the_big_index = 0
-while True:
-    list_len = 0
-    restarting = False
-    in_trade = False
-    updowncount = 0
-    updowncount1 = 0
-    updowncount1_2 = 0
-    updowncount1_3 = 0
+
+# Skip main execution during import (for CI/CD testing)
+if __name__ == "__main__":
+    while True:
+        list_len = 0
+        restarting = False
+        in_trade = False
+        updowncount = 0
+        updowncount1 = 0
+        updowncount1_2 = 0
+        updowncount1_3 = 0
     updowncount1_4 = 0
     high_var2 = 0.0
     low_var2 = 0.0
@@ -526,6 +544,8 @@ while True:
     while True:
         time.sleep(0.5)
         try:
+            if market is None:
+                raise RuntimeError("KuCoin market client unavailable")
             history = (
                 str(
                     market.get_kline(
@@ -623,6 +643,8 @@ while True:
         price_list.reverse()
         high_price_list.reverse()
         low_price_list.reverse()
+        if market is None:
+            raise RuntimeError("KuCoin market client unavailable")
         ticker_data = (
             str(market.get_ticker(coin_choice))
             .replace('"', "")
@@ -2210,3 +2232,7 @@ while True:
             break
         else:
             continue
+
+
+if __name__ == "__main__":
+    main()
