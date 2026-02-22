@@ -1,0 +1,53 @@
+{
+  "auto_best_price": false,
+  "exchanges": [
+    {
+      "api_key": "",
+      "api_secret": "",
+      "enabled": true,
+      "exchange_type": "binance",
+      "passphrase": "",
+      "region_preference": 1,
+      "sandbox": false
+    },
+    {
+      "api_key": "",
+      "api_secret": "",
+      "enabled": true,
+      "exchange_type": "kraken",
+      "passphrase": "",
+      "region_preference": 2,
+      "sandbox": false
+    },
+    {
+      "api_key": "",
+      "api_secret": "",
+      "enabled": true,
+      "exchange_type": "kucoin",
+      "passphrase": "",
+      "region_preference": 3,
+      "sandbox": false
+    },
+    {
+      "api_key": "",
+      "api_secret": "",
+      "enabled": false,
+      "exchange_type": "coinbase",
+      "passphrase": "",
+      "region_preference": 4,
+      "sandbox": false
+    },
+    {
+      "api_key": "",
+      "api_secret": "",
+      "enabled": false,
+      "exchange_type": "robinhood",
+      "passphrase": "",
+      "region_preference": 5,
+      "sandbox": false
+    }
+  ],
+  "price_comparison_enabled": true,
+  "primary_exchange": "binance",
+  "user_region": "GLOBAL"
+}

@@ -24,21 +24,14 @@ from nacl.signing import SigningKey
 
 # Local imports
 from pt_credentials import get_credentials
+from pt_data_provider import get_data_provider
 
-# Conditional imports for CI/CD compatibility
-market = None
-try:
-    from kucoin.client import Market
-
-    # Initialize market client
-    market = Market(url="https://api.kucoin.com")
-except Exception as e:
-    # Skip kucoin in test environments or when package has issues
-    if os.environ.get("POWERTRADER_ENV") == "test":
-        print(f"ℹ Skipping KuCoin client in test environment: {e}")
-    else:
-        print(f"⚠ KuCoin client unavailable: {e}")
-    market = None
+# Universal data provider (supports 65+ exchanges, user configurable)
+data_provider = get_data_provider()
+if data_provider.is_available():
+    print(f"✓ Data provider: {data_provider.get_provider_info()}")
+else:
+    print("⚠ No data providers available")
 
 # -----------------------------
 # Robinhood market-data (current ASK), same source as rhcb.py trader:
@@ -536,10 +529,10 @@ def init_coin(sym: str):
         history_list = []
         while True:
             try:
-                if market is None:
-                    raise RuntimeError("KuCoin market client unavailable")
+                if not data_provider.is_available():
+                    raise RuntimeError("No data providers available")
                 history = (
-                    str(market.get_kline(coin, tf_choices[ind]))
+                    data_provider.get_kline_data(coin, tf_choices[ind])
                     .replace("]]", "], ")
                     .replace("[[", "[")
                 )
@@ -745,10 +738,10 @@ def step_coin(sym: str):
         history_list = []
         while True:
             try:
-                if market is None:
-                    raise RuntimeError("KuCoin market client unavailable")
+                if not data_provider.is_available():
+                    raise RuntimeError("No data providers available")
                 history = (
-                    str(market.get_kline(coin, tf_choices[tf_choice_index]))
+                    data_provider.get_kline_data(coin, tf_choices[tf_choice_index])
                     .replace("]]", "], ")
                     .replace("[[", "[")
                 )
@@ -1055,10 +1048,10 @@ def step_coin(sym: str):
             # update the_time snapshot (same as before)
             while True:
                 try:
-                    if market is None:
-                        raise RuntimeError("KuCoin market client unavailable")
+                    if not data_provider.is_available():
+                        raise RuntimeError("No data providers available")
                     history = (
-                        str(market.get_kline(coin, tf_choices[inder]))
+                        data_provider.get_kline_data(coin, tf_choices[inder])
                         .replace("]]", "], ")
                         .replace("[[", "[")
                     )
@@ -1435,10 +1428,10 @@ def step_coin(sym: str):
         while this_index_now < len(tf_update):
             while True:
                 try:
-                    if market is None:
-                        raise RuntimeError("KuCoin market client unavailable")
+                    if not data_provider.is_available():
+                        raise RuntimeError("No data providers available")
                     history = (
-                        str(market.get_kline(coin, tf_choices[this_index_now]))
+                        data_provider.get_kline_data(coin, tf_choices[this_index_now])
                         .replace("]]", "], ")
                         .replace("[[", "[")
                     )
