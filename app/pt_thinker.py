@@ -580,6 +580,28 @@ def main():
     # restore CWD to base after init
     os.chdir(BASE_DIR)
 
+    # Main execution loop
+    try:
+        while True:
+            # Hot-reload coins from GUI settings while running
+            _sync_coins_from_settings()
+
+            for _sym in CURRENT_COINS:
+                step_coin(_sym)
+
+            # clear + re-print one combined screen (so you don't see old output above new)
+            os.system("cls" if os.name == "nt" else "clear")
+
+            for _sym in CURRENT_COINS:
+                print(display_cache.get(_sym, _sym + "  (no data yet)"))
+                print("\n" + ("-" * 60) + "\n")
+
+            # small sleep so you don't peg CPU when running many coins
+            time.sleep(0.15)
+
+    except Exception:
+        PrintException()
+
 
 if __name__ == "__main__":
     # Only initialize when run directly, not when imported
@@ -645,6 +667,11 @@ def step_coin(sym: str):
     # run inside the coin folder so all existing file reads/writes stay relative + isolated
     os.chdir(coin_folder(sym))
     coin = sym + "-USDT"
+
+    # Initialize state if it doesn't exist (for import testing scenarios)
+    if sym not in states:
+        states[sym] = new_coin_state()
+
     st = states[sym]
 
     # --- training freshness gate ---
@@ -1465,25 +1492,3 @@ def step_coin(sym: str):
     st["training_issues"] = training_issues
 
     states[sym] = st
-
-
-try:
-    while True:
-        # Hot-reload coins from GUI settings while running
-        _sync_coins_from_settings()
-
-        for _sym in CURRENT_COINS:
-            step_coin(_sym)
-
-        # clear + re-print one combined screen (so you don't see old output above new)
-        os.system("cls" if os.name == "nt" else "clear")
-
-        for _sym in CURRENT_COINS:
-            print(display_cache.get(_sym, _sym + "  (no data yet)"))
-            print("\n" + ("-" * 60) + "\n")
-
-        # small sleep so you don't peg CPU when running many coins
-        time.sleep(0.15)
-
-except Exception:
-    PrintException()

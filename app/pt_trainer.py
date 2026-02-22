@@ -191,7 +191,8 @@ def load_memory(tf_choice: str) -> Dict[str, Any]:
             .split("~")
         )
     except (FileNotFoundError, IOError) as e:
-        print(f"Warning: Could not load memories_{tf_choice}.txt: {e}")
+        if os.environ.get("POWERTRADER_ENV") != "test":
+            print(f"Warning: Could not load memories_{tf_choice}.txt: {e}")
         data["memory_list"] = []
 
     try:
@@ -205,7 +206,8 @@ def load_memory(tf_choice: str) -> Dict[str, Any]:
             .split(" ")
         )
     except (FileNotFoundError, IOError) as e:
-        print(f"Warning: Could not load memory_weights_{tf_choice}.txt: {e}")
+        if os.environ.get("POWERTRADER_ENV") != "test":
+            print(f"Warning: Could not load memory_weights_{tf_choice}.txt: {e}")
         data["weight_list"] = []
 
     try:
@@ -219,7 +221,8 @@ def load_memory(tf_choice: str) -> Dict[str, Any]:
             .split(" ")
         )
     except (FileNotFoundError, IOError) as e:
-        print(f"Warning: Could not load memory_weights_high_{tf_choice}.txt: {e}")
+        if os.environ.get("POWERTRADER_ENV") != "test":
+            print(f"Warning: Could not load memory_weights_high_{tf_choice}.txt: {e}")
         data["high_weight_list"] = []
 
     try:
@@ -233,7 +236,8 @@ def load_memory(tf_choice: str) -> Dict[str, Any]:
             .split(" ")
         )
     except (FileNotFoundError, IOError) as e:
-        print(f"Warning: Could not load memory_weights_low_{tf_choice}.txt: {e}")
+        if os.environ.get("POWERTRADER_ENV") != "test":
+            print(f"Warning: Could not load memory_weights_low_{tf_choice}.txt: {e}")
         data["low_weight_list"] = []
 
     _memory_cache[tf_choice] = data
@@ -373,7 +377,7 @@ except Exception:
 
 coin_choice = _arg_coin + "-USDT"
 
-restart_processing = True
+restart_processing = "y"  # Default to "yes" for processing
 
 # GUI reads this status file to know if this coin is TRAINING or FINISHED
 _trainer_started_at = int(time.time())
@@ -393,14 +397,17 @@ except Exception:
 
 
 the_big_index = 0
-while True:
-    list_len = 0
-    restarting = False
-    in_trade = False
-    updowncount = 0
-    updowncount1 = 0
-    updowncount1_2 = 0
-    updowncount1_3 = 0
+
+# Skip main execution during import (for CI/CD testing)
+if __name__ == "__main__":
+    while True:
+        list_len = 0
+        restarting = False
+        in_trade = False
+        updowncount = 0
+        updowncount1 = 0
+        updowncount1_2 = 0
+        updowncount1_3 = 0
     updowncount1_4 = 0
     high_var2 = 0.0
     low_var2 = 0.0
@@ -2225,3 +2232,7 @@ while True:
             break
         else:
             continue
+
+
+if __name__ == "__main__":
+    main()
