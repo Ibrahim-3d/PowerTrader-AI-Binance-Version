@@ -50,13 +50,18 @@ jobs:
         # Generate version
         if [[ $GITHUB_REF == refs/tags/* ]]; then
           VERSION=${GITHUB_REF#refs/tags/}
+          PYTHON_VERSION=${VERSION#v}  # Remove 'v' prefix for Python packaging
         else
           VERSION="v$(date +'%Y.%m.%d')-${COMMIT}"
+          # Create PEP 440 compatible version for Python packaging
+          PYTHON_VERSION="$(date +'%Y.%m.%d')+${COMMIT}"
         fi
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "PYTHON_VERSION=$PYTHON_VERSION" >> $GITHUB_OUTPUT
         echo "DATE=$DATE" >> $GITHUB_OUTPUT
         echo "COMMIT=$COMMIT" >> $GITHUB_OUTPUT
         echo "Generated version: $VERSION"
+        echo "Python version: $PYTHON_VERSION"
 
     - name: Create release directory structure
       run: |
@@ -250,7 +255,7 @@ jobs:
 
         setup(
             name="powertrader-ai",
-            version="${{ steps.version.outputs.VERSION }}".replace('v', ''),
+            version="${{ steps.version.outputs.PYTHON_VERSION }}",
             author="Simon Jackson",
             author_email="simon@powertrader.ai",
             description="PowerTraderAI+ - Advanced Cryptocurrency Trading Bot",
