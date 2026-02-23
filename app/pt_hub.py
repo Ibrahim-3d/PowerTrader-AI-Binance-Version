@@ -5046,13 +5046,10 @@ class PowerTraderHub(tk.Tk):
 
         # Exchange setup button
         def open_exchange_setup():
-            import subprocess
-            import sys
-
             try:
-                subprocess.Popen(
-                    [sys.executable, "exchange_setup.py"], cwd=os.path.dirname(__file__)
-                )
+                from exchange_config_gui import ExchangeConfigGUI
+
+                exchange_gui = ExchangeConfigGUI(parent=self)
                 messagebox.showinfo(
                     "Exchange Setup",
                     "Exchange configuration tool opened in separate window.",
