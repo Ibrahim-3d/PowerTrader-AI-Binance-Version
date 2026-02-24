@@ -103,7 +103,7 @@ class PowerTraderAPIServer:
                 }
             )
 
-        @self.app.route("/health")
+        @self.app.route("/api/health")
         def health():
             """Health check endpoint."""
             try:
@@ -132,7 +132,7 @@ class PowerTraderAPIServer:
             except Exception as e:
                 return jsonify({"status": "error", "error": str(e)}), 500
 
-        @self.app.route("/status")
+        @self.app.route("/api/status")
         def get_status():
             """Get current trading status."""
             try:
@@ -166,7 +166,7 @@ class PowerTraderAPIServer:
                 logger.error(f"Error reading status: {e}")
                 return jsonify({"error": "Failed to read status"}), 500
 
-        @self.app.route("/positions")
+        @self.app.route("/api/positions")
         def get_positions():
             """Get current trading positions."""
             try:
@@ -197,7 +197,7 @@ class PowerTraderAPIServer:
                 logger.error(f"Error reading positions: {e}")
                 return jsonify({"error": "Failed to read positions"}), 500
 
-        @self.app.route("/history")
+        @self.app.route("/api/history")
         def get_trade_history():
             """Get trade history with optional filters."""
             try:
@@ -257,7 +257,7 @@ class PowerTraderAPIServer:
                 logger.error(f"Error reading trade history: {e}")
                 return jsonify({"error": "Failed to read trade history"}), 500
 
-        @self.app.route("/performance")
+        @self.app.route("/api/performance")
         def get_performance():
             """Get performance metrics."""
             try:
@@ -319,7 +319,7 @@ class PowerTraderAPIServer:
                 logger.error(f"Error reading performance: {e}")
                 return jsonify({"error": "Failed to read performance data"}), 500
 
-        @self.app.route("/account")
+        @self.app.route("/api/account")
         def get_account():
             """Get account value and portfolio summary."""
             try:
