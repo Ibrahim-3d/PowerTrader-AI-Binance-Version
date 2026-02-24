@@ -69,32 +69,74 @@ powertrader_env\Scripts\activate
 
 ## Install Dependencies
 
-### Install Required Packages
+### Core Dependencies
+
+Install the essential packages required for PowerTrader to function:
 
 ```bash
 # Navigate to PowerTraderAI+ directory
 cd PowerTraderAI
 
-# Install dependencies
+# Install core dependencies
 pip install -r requirements.txt
 ```
 
-### Dependency List
+### Optional Dependencies (Enhanced Features)
 
-The application requires these key packages:
+PowerTrader includes an automated installer for optional dependencies that provide enhanced functionality:
+
+```bash
+# Run the optional dependency installer
+python app/install_optional_deps.py
+```
+
+**Interactive Installation Options:**
+1. **Install ALL missing packages** (recommended for full functionality)
+2. **Real-time Market Data packages** (`websocket-client`, `ccxt`)
+3. **Analytics packages** (`scipy`)
+4. **Charts packages** (`seaborn`)
+5. **AI Research packages** (`openai`)
+6. **Skip installation** (use core functionality only)
+
+### Dependency Categories
+
+#### Core Dependencies (Required)
+These packages are essential and installed with `pip install -r requirements.txt`:
 - `tkinter` - GUI framework (included with Python)
 - `matplotlib` - Charting and visualization
+- `pandas` - Data analysis and manipulation
+- `numpy` - Numerical computing
 - `requests` - HTTP client for API calls
 - `python-kucoin` - KuCoin API client
 - `robin-stocks` - Robinhood API client
 - `cryptography` - Encryption for secure storage
 
-### Verify Installation
+#### Optional Dependencies (Enhanced Features)
+These packages provide additional functionality and graceful degradation if missing:
 
-```python
-# Test imports
-python -c "import tkinter, matplotlib, requests; print('All dependencies installed successfully')"
+**Real-time Market Data** (for live feeds and multi-exchange support):
+- `websocket-client` - WebSocket connections for real-time data
+- `ccxt` - Cryptocurrency exchange library with 100+ exchanges
+
+**Advanced Analytics** (for enhanced risk management and statistical analysis):
+- `scipy` - Scientific computing and advanced statistics
+
+**Charts & Visualization** (for beautiful statistical plots):
+- `seaborn` - Statistical data visualization
+
+**AI Research** (for AI-powered market analysis):
+- `openai` - OpenAI API client for market research
+
+### Dependency Status Checking
+
+Verify which dependencies are available:
+
+```bash
+# Test all dependencies
+python test_dependencies.py
 ```
+
+**Note**: PowerTrader is designed with graceful degradation - if optional packages are missing, the system will show helpful installation messages and fall back to core functionality.
 
 ## First Run
 

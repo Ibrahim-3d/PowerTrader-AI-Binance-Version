@@ -76,14 +76,33 @@ For detailed security practices, see the **[Security Guide](docs/security/README
 git clone https://github.com/sjackson0109/PowerTraderAI.git
 cd PowerTraderAI
 
-# 3. Install dependencies
-pip install -r app/requirements.txt
+# 3. Install core dependencies
+pip install -r requirements.txt
 
-# 4. Launch the application
-python app/pt_desktop_app.py
+# 4. Install optional dependencies for enhanced features
+python app/install_optional_deps.py
+
+# 5. Launch the application
+python app/pt_hub.py
 ```
 
 **Important**: Follow the complete [Installation Guide](docs/getting-started/installation.md) for detailed setup instructions.
+
+### Optional Dependencies
+PowerTrader includes an automated installer for optional dependencies that enhance functionality:
+
+```bash
+# Run the optional dependency installer
+python app/install_optional_deps.py
+```
+
+**Available Optional Packages:**
+- **Real-time Market Data**: `websocket-client`, `ccxt` - Live market feeds and multi-exchange support
+- **Advanced Analytics**: `scipy` - Enhanced statistical analysis and risk calculations
+- **Charts & Visualization**: `seaborn` - Beautiful statistical plots and advanced charting
+- **AI Research**: `openai` - AI-powered market research and analysis
+
+**Note**: Core functionality works without optional packages, which gracefully degrade to fallback modes.
 
 ## How PowerTraderAI+ Works
 
