@@ -32,6 +32,7 @@ type logs\powertrader.log | findstr ERROR
 
 ## Common Issues Index
 
+- **[Dependency Issues](DEPENDENCY_ISSUES.md)** - Missing packages, import errors, optional dependencies ⭐
 - [Installation Problems](#installation-problems)
 - [API Connection Issues](#api-connection-issues)
 - [Authentication Failures](#authentication-failures)
@@ -39,6 +40,21 @@ type logs\powertrader.log | findstr ERROR
 - [Data/Chart Problems](#data-and-chart-problems)
 - [Performance Issues](#performance-issues)
 - [Security and Credential Issues](#security-and-credential-issues)
+
+## Quick Fixes
+
+### Dependency Issues (Most Common) ⭐
+If you're experiencing import errors, missing features, or module not found errors:
+
+```bash
+# Quick fix for all dependency issues
+python app/install_optional_deps.py
+
+# Test your installation
+python test_dependencies.py
+```
+
+**See detailed guide**: **[Dependency Issues Troubleshooting](DEPENDENCY_ISSUES.md)**
 
 ## Installation Problems
 
