@@ -7,6 +7,7 @@ on:
     branches: [ 'main', 'master', 'develop', 'release/*' ]  # Only important branches
   pull_request:
     branches: [ 'main', 'master', 'develop' ]  # PRs to main branches only
+  workflow_dispatch:  # Allow manual triggering for testing
 
 env:
   PYTHON_VERSION: '3.11'
