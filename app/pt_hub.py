@@ -73,6 +73,17 @@ except ImportError:
     DEPENDENCY_CHECKER_AVAILABLE = False
     print("Warning: Dependency checker not available.")
 
+# API Server imports
+try:
+    from pt_api_server import create_api_server
+
+    API_SERVER_AVAILABLE = True
+except ImportError:
+    API_SERVER_AVAILABLE = False
+    print(
+        "Warning: Public API Server not available. Install flask and flask-cors to enable."
+    )
+
 # Long-term Holdings imports
 try:
     from long_term_holdings_gui import HoldingsManagementGUI
@@ -156,6 +167,28 @@ DARK_ACCENT = "#00FF66"
 DARK_ACCENT2 = "#00E5FF"
 DARK_SELECT_BG = "#17324A"
 DARK_SELECT_FG = "#00FF66"
+
+
+def _atomic_write_json(path: str, data: dict) -> None:
+    """Atomic JSON writing to prevent corruption during concurrent operations."""
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)  # Atomic operation on Windows/Unix
+    except Exception:
+        pass
+
+
+def _atomic_write_text(path: str, content: str) -> None:
+    """Atomic text writing to prevent corruption during concurrent operations."""
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)  # Atomic operation on Windows/Unix
+    except Exception:
+        pass
 
 
 @dataclass
@@ -477,6 +510,10 @@ DEFAULT_SETTINGS = {
     "script_neural_trainer": "pt_trainer.py",
     "script_trader": "pt_trader.py",
     "auto_start_scripts": False,
+    # --- Public API Server Settings ---
+    "api_server_enabled": False,  # Enable public REST API server
+    "api_server_host": "127.0.0.1",  # API server host (127.0.0.1 for localhost only)
+    "api_server_port": 8080,  # API server port
 }
 
 
@@ -725,10 +762,12 @@ class CandleFetcher:
 
             self._requests = requests
 
-        # Small in-memory cache to keep timeframe switching snappy.
-        # key: (pair, timeframe, limit) -> (saved_time_epoch, candles)
-        self._cache: Dict[Tuple[str, str, int], Tuple[float, List[dict]]] = {}
+        # Enhanced in-memory cache with automatic cleanup
+        # key: (pair, timeframe, limit) -> (saved_time_epoch, candles, access_count)
+        self._cache: Dict[Tuple[str, str, int], Tuple[float, List[dict], int]] = {}
         self._cache_ttl_seconds: float = 10.0
+        self._cache_max_entries: int = 50  # Prevent unlimited memory growth
+        self._cache_cleanup_threshold: int = 60  # Clean up when we exceed this
 
     def get_klines(self, symbol: str, timeframe: str, limit: int = 120) -> List[dict]:
         """
@@ -744,8 +783,19 @@ class CandleFetcher:
         now = time.time()
         cache_key = (pair, timeframe, limit)
         cached = self._cache.get(cache_key)
-        if cached and (now - float(cached[0])) <= float(self._cache_ttl_seconds):
+        if (
+            cached
+            and len(cached) >= 2
+            and (now - float(cached[0])) <= float(self._cache_ttl_seconds)
+        ):
+            # Update access count for LRU cleanup
+            access_count = cached[2] + 1 if len(cached) > 2 else 1
+            self._cache[cache_key] = (cached[0], cached[1], access_count)
             return cached[1]
+
+        # Clean up cache if it gets too large
+        if len(self._cache) > self._cache_cleanup_threshold:
+            self._cleanup_cache()
 
         # rough window (timeframe-dependent) so we get enough candles
         tf_seconds = {
@@ -793,7 +843,7 @@ class CandleFetcher:
                 if limit and len(candles) > limit:
                     candles = candles[-limit:]
 
-                self._cache[cache_key] = (now, candles)
+                self._cache[cache_key] = (now, candles, 1)
                 return candles
             except Exception:
                 return []
@@ -822,10 +872,36 @@ class CandleFetcher:
             if limit and len(candles) > limit:
                 candles = candles[-limit:]
 
-            self._cache[cache_key] = (now, candles)
+            self._cache[cache_key] = (now, candles, 1)
             return candles
         except Exception:
             return []
+
+    def _cleanup_cache(self) -> None:
+        """Clean up old cache entries to prevent unlimited memory growth."""
+        try:
+            now = time.time()
+            # Remove expired entries first
+            expired_keys = [
+                k
+                for k, v in self._cache.items()
+                if len(v) >= 1 and (now - float(v[0])) > self._cache_ttl_seconds
+            ]
+            for k in expired_keys:
+                del self._cache[k]
+
+            # If still too many, remove least recently used entries
+            if len(self._cache) > self._cache_max_entries:
+                # Sort by access count (ascending) to remove least used
+                sorted_items = sorted(
+                    self._cache.items(), key=lambda x: x[1][2] if len(x[1]) > 2 else 0
+                )
+                # Keep only the most accessed entries
+                keep_count = self._cache_max_entries
+                self._cache = dict(sorted_items[-keep_count:])
+        except Exception:
+            # If cleanup fails, clear entire cache as fallback
+            self._cache.clear()
 
 
 # -----------------------------
@@ -984,21 +1060,44 @@ class CandleChart(ttk.Frame):
         low_path = os.path.join(folder, "low_bound_prices.html")
         high_path = os.path.join(folder, "high_bound_prices.html")
 
-        # --- Cached neural reads (per path, by mtime) ---
+        # --- Enhanced cached neural reads (per path, by mtime with corruption protection) ---
         if not hasattr(self, "_neural_cache"):
-            self._neural_cache = {}  # path -> (mtime, value)
+            self._neural_cache = {}  # path -> (mtime, value, error_count)
+            self._neural_cache_max_errors = 3
 
         def _cached(path: str, loader, default):
+            """Enhanced caching with corruption protection and error tracking."""
             try:
                 mtime = os.path.getmtime(path)
+                # Check for .tmp files indicating interrupted writes
+                tmp_path = path + ".tmp"
+                if os.path.exists(tmp_path):
+                    # Clean up interrupted atomic write
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
             except Exception:
                 return default
+
             hit = self._neural_cache.get(path)
-            if hit and hit[0] == mtime:
+            if hit and len(hit) >= 2 and hit[0] == mtime:
+                # Reset error count on successful cache hit
+                if len(hit) > 2 and hit[2] > 0:
+                    self._neural_cache[path] = (hit[0], hit[1], 0)
                 return hit[1]
-            v = loader(path)
-            self._neural_cache[path] = (mtime, v)
-            return v
+
+            # Load with error tracking
+            try:
+                v = loader(path)
+                self._neural_cache[path] = (mtime, v, 0)
+                return v
+            except Exception as e:
+                # Track errors to avoid repeatedly trying corrupted files
+                error_count = hit[2] + 1 if hit and len(hit) > 2 else 1
+                if error_count < self._neural_cache_max_errors:
+                    self._neural_cache[path] = (mtime, default, error_count)
+                return default
 
         long_levels = (
             _cached(low_path, read_price_levels_from_html, []) if folder else []
@@ -1733,6 +1832,28 @@ class PowerTraderHub(tk.Tk):
 
         self.settings = self._load_settings()
 
+        # Enhanced training status tracking with atomic operations
+        def _write_training_status(coin: str, state: str, **kwargs) -> None:
+            """Write training status with atomic operations to prevent corruption."""
+            status_data = {
+                "coin": coin,
+                "state": state,  # TRAINING, FINISHED, ERROR, NOT_STARTED
+                "timestamp": int(time.time()),
+                **kwargs,
+            }
+
+            # Try to write to coin-specific status file
+            try:
+                coin_dir = os.path.join(self.settings["main_neural_dir"], coin)
+                if os.path.exists(coin_dir):
+                    status_path = os.path.join(coin_dir, "trainer_status.json")
+                    _atomic_write_json(status_path, status_data)
+            except Exception:
+                pass  # Non-critical status write failure
+
+        # Store the training status writer for use by other components
+        self._write_training_status = _write_training_status
+
         self.project_dir = os.path.abspath(os.path.dirname(__file__))
 
         main_dir = str(self.settings.get("main_neural_dir") or "").strip()
@@ -1813,6 +1934,15 @@ class PowerTraderHub(tk.Tk):
         if EXCHANGE_SUPPORT_AVAILABLE:
             self._init_exchange_system()
 
+        # Initialize Public API Server
+        self._api_server = None
+        self._api_server_enabled = bool(self.settings.get("api_server_enabled", False))
+        self._api_server_port = int(self.settings.get("api_server_port", 8080))
+        self._api_server_host = self.settings.get("api_server_host", "127.0.0.1")
+
+        if self._api_server_enabled:
+            self._init_api_server()
+
         # Run startup dependency check
         self._run_startup_dependency_check()
 
@@ -1826,6 +1956,10 @@ class PowerTraderHub(tk.Tk):
 
         if bool(self.settings.get("auto_start_scripts", False)):
             self.start_all_scripts()
+
+        # Auto-start API server if enabled
+        if API_SERVER_AVAILABLE and self.settings.get("api_server_enabled", False):
+            self.start_api_server()
 
         self.after(250, self._tick)
 
@@ -6746,6 +6880,37 @@ Platform: {sys.platform}
             existing_api_key, existing_private_b64 = _read_api_files()
             private_b64_state = {"value": (existing_private_b64 or "").strip()}
 
+            def _backup_existing_credentials() -> None:
+                """Create timestamped backups of existing credentials before changes."""
+                try:
+                    from datetime import datetime
+
+                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    if os.path.isfile(key_path):
+                        backup_key = f"{key_path}.bak_{ts}"
+                        shutil.copy2(key_path, backup_key)
+                    if os.path.isfile(secret_path):
+                        backup_secret = f"{secret_path}.bak_{ts}"
+                        shutil.copy2(secret_path, backup_secret)
+                except Exception:
+                    pass
+
+            def _validate_api_key(api_key: str) -> Tuple[bool, str]:
+                """Enhanced API key validation with user-friendly feedback."""
+                if not api_key:
+                    return False, "API key is required"
+                if len(api_key) < 10:
+                    return (
+                        False,
+                        "API key looks unusually short. Please verify you copied the complete key from Robinhood.",
+                    )
+                if not api_key.startswith("rh."):
+                    return (
+                        False,
+                        "Robinhood API keys typically start with 'rh.' - please verify this is the correct key.",
+                    )
+                return True, "API key format looks correct"
+
             # -----------------------------
             # Helpers (open folder, copy, etc.)
             # -----------------------------
@@ -6986,6 +7151,30 @@ Platform: {sys.platform}
                     )
                     return
 
+                # Enhanced API key validation with user-friendly feedback
+                if len(api_key) < 10:
+                    if not messagebox.askyesno(
+                        "API key validation",
+                        "That API key looks unusually short. Robinhood API keys are typically longer.\n\n"
+                        "Are you sure you pasted the complete API Key from Robinhood?",
+                        icon="warning",
+                    ):
+                        return
+
+                # Create backup of existing credentials before saving new ones
+                try:
+                    from datetime import datetime
+
+                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    if os.path.isfile(key_path):
+                        backup_key = f"{key_path}.bak_{ts}"
+                        shutil.copy2(key_path, backup_key)
+                    if os.path.isfile(secret_path):
+                        backup_secret = f"{secret_path}.bak_{ts}"
+                        shutil.copy2(secret_path, backup_secret)
+                except Exception:
+                    pass  # Non-critical backup failure
+
                 # Safe test: market-data endpoint (no trading)
                 base_url = "https://trading.robinhood.com"
                 path = "/api/v1/crypto/marketdata/best_bid_ask/?symbol=BTC-USD"
@@ -7159,10 +7348,9 @@ Platform: {sys.platform}
                     pass
 
                 try:
-                    with open(key_path, "w", encoding="utf-8") as f:
-                        f.write(api_key)
-                    with open(secret_path, "w", encoding="utf-8") as f:
-                        f.write(priv_b64)
+                    # Use atomic writes to prevent corruption during concurrent access
+                    _atomic_write_text(key_path, api_key)
+                    _atomic_write_text(secret_path, priv_b64)
                 except Exception as e:
                     messagebox.showerror(
                         "Save failed",
@@ -7224,6 +7412,55 @@ Platform: {sys.platform}
         add_row(r, "Chart refresh seconds:", chart_refresh_var)
         r += 1
         add_row(r, "Candles limit:", candles_limit_var)
+        r += 1
+
+        # --- Public API Server Section ---
+        ttk.Separator(frm, orient="horizontal").grid(
+            row=r, column=0, columnspan=3, sticky="ew", pady=10
+        )
+        r += 1
+
+        api_enabled_var = tk.BooleanVar(
+            value=bool(self.settings.get("api_server_enabled", False))
+        )
+        api_host_var = tk.StringVar(
+            value=self.settings.get("api_server_host", "127.0.0.1")
+        )
+        api_port_var = tk.StringVar(
+            value=str(self.settings.get("api_server_port", 8080))
+        )
+
+        chk_api = ttk.Checkbutton(
+            frm, text="Enable Public API Server", variable=api_enabled_var
+        )
+        chk_api.grid(row=r, column=0, columnspan=3, sticky="w", pady=(0, 5))
+        r += 1
+
+        add_row(r, "API Host:", api_host_var)
+        r += 1
+        add_row(r, "API Port:", api_port_var)
+        r += 1
+
+        # API Status and test button
+        api_status_frame = ttk.Frame(frm)
+        api_status_frame.grid(row=r, column=0, columnspan=3, sticky="ew", pady=(5, 10))
+        api_status_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(api_status_frame, text="Status:").grid(row=0, column=0, sticky="w")
+        api_status_lbl = ttk.Label(api_status_frame, text="Unknown")
+        api_status_lbl.grid(row=0, column=1, sticky="w", padx=(10, 0))
+
+        def test_api():
+            if API_SERVER_AVAILABLE:
+                status = self.get_api_server_status()
+                api_status_lbl.config(text=status.get("message", "Unknown"))
+            else:
+                api_status_lbl.config(text="Flask not installed")
+
+        ttk.Button(api_status_frame, text="Test API", command=test_api).grid(
+            row=0, column=2, sticky="e"
+        )
+        test_api()  # Initial status check
         r += 1
 
         chk = ttk.Checkbutton(
@@ -7374,7 +7611,31 @@ Platform: {sys.platform}
                     float(candles_limit_var.get().strip())
                 )
                 self.settings["auto_start_scripts"] = bool(auto_start_var.get())
+
+                # --- API Server Settings ---
+                self.settings["api_server_enabled"] = api_enabled_var.get()
+                self.settings["api_server_host"] = api_host_var.get()
+                try:
+                    port = int(api_port_var.get())
+                    self.settings["api_server_port"] = max(1, min(port, 65535))
+                except ValueError:
+                    self.settings["api_server_port"] = 8080
+
+                # --- Dark Theme and Notifications ---
+                self.settings["dark_theme"] = dark_theme_var.get()
+                self.settings["training_notifications"] = notifications_var.get()
+
                 self._save_settings()
+
+                # Apply theme changes
+                self._apply_theme()
+
+                # Restart API server if settings changed
+                if API_SERVER_AVAILABLE:
+                    if api_enabled_var.get():
+                        self.start_api_server()
+                    else:
+                        self.stop_api_server()
 
                 # If new coin(s) were added and their training folder doesn't exist yet,
                 # create the folder and copy neural_trainer.py into it RIGHT AFTER saving settings.
@@ -7460,6 +7721,62 @@ Platform: {sys.platform}
                 "details": f"Failed to initialize: {str(e)}",
             }
             print(f"Exchange system initialization error: {e}")
+
+    def _init_api_server(self):
+        """Initialize the public API server"""
+        if not API_SERVER_AVAILABLE:
+            print("API Server not available - install flask and flask-cors")
+            return
+
+        try:
+            self._api_server = create_api_server(
+                hub_data_dir=self.hub_dir,
+                port=self._api_server_port,
+                host=self._api_server_host,
+            )
+
+            if self._api_server_enabled:
+                self._api_server.start_server()
+                print(
+                    f"Public API server started at http://{self._api_server_host}:{self._api_server_port}"
+                )
+
+        except Exception as e:
+            print(f"Failed to initialize API server: {e}")
+            self._api_server = None
+
+    def toggle_api_server(self, enabled: bool):
+        """Toggle API server on/off"""
+        if not API_SERVER_AVAILABLE:
+            return False
+
+        if enabled and not self._api_server:
+            self._init_api_server()
+            return self._api_server is not None
+        elif enabled and self._api_server and not self._api_server.is_running():
+            self._api_server.start_server()
+            return True
+        elif not enabled and self._api_server and self._api_server.is_running():
+            self._api_server.stop_server()
+            return True
+        return False
+
+    def get_api_server_status(self) -> dict:
+        """Get current API server status"""
+        if not API_SERVER_AVAILABLE:
+            return {"status": "unavailable", "message": "Flask not installed"}
+
+        if not self._api_server:
+            return {"status": "disabled", "message": "API server not initialized"}
+
+        if self._api_server.is_running():
+            return {
+                "status": "running",
+                "url": f"http://{self._api_server_host}:{self._api_server_port}",
+                "message": "API server is operational",
+            }
+        else:
+            return {"status": "stopped", "message": "API server is stopped"}
 
     def _check_exchange_status_worker(self):
         """Background worker to check exchange connectivity"""
