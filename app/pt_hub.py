@@ -136,6 +136,15 @@ except ImportError:
     PERFORMANCE_ATTRIBUTION_AVAILABLE = False
     print("Warning: Performance Attribution Engine not available.")
 
+# Institutional Trading imports
+try:
+    from institutional_trading_gui import InstitutionalTradingGUI
+
+    INSTITUTIONAL_TRADING_AVAILABLE = True
+except ImportError:
+    INSTITUTIONAL_TRADING_AVAILABLE = False
+    print("Warning: Institutional Trading System not available.")
+
 DARK_BG = "#070B10"
 DARK_BG2 = "#0B1220"
 DARK_PANEL = "#0E1626"
@@ -3236,6 +3245,11 @@ class PowerTraderHub(tk.Tk):
         # ----------------------------
         self._create_performance_attribution_tab()
 
+        # ----------------------------
+        # TAB 13: Institutional Trading
+        # ----------------------------
+        self._create_institutional_trading_tab()
+
         ttk.Label(hist_controls, text="Filter:").pack(side="left")
         self.hist_filter_var = tk.StringVar()
         hist_filter_entry = ttk.Entry(
@@ -4390,6 +4404,47 @@ class PowerTraderHub(tk.Tk):
             except:
                 pass
             print(f"Error creating Performance Attribution tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _create_institutional_trading_tab(self):
+        """Create the Institutional Trading tab for enterprise-grade trading."""
+        try:
+            # Create tab
+            institutional_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(institutional_tab, text="🏦 Institutional Trading")
+
+            if not INSTITUTIONAL_TRADING_AVAILABLE:
+                # Show dependency message
+                ttk.Label(
+                    institutional_tab,
+                    text="🏦 Institutional Trading System\n\nEnterprise-grade trading infrastructure with:\n• High-volume order processing\n• Advanced algorithmic execution (TWAP, VWAP, Iceberg)\n• Institutional risk management\n• Batch order processing\n• Performance monitoring\n• Compliance reporting\n\nSystem is initializing...",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print("Institutional Trading System loading...")
+                return
+
+            # Initialize the institutional trading GUI
+            self.institutional_trading_gui = InstitutionalTradingGUI(institutional_tab)
+
+            print("Institutional Trading tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in institutional_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    institutional_tab,
+                    text=f"Institutional Trading Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating Institutional Trading tab: {e}")
             import traceback
 
             traceback.print_exc()
