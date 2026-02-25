@@ -4,7 +4,7 @@
     {
       "api_key": "",
       "api_secret": "",
-      "enabled": true,
+      "enabled": false,
       "exchange_type": "binance",
       "passphrase": "",
       "region_preference": 1,
@@ -13,7 +13,7 @@
     {
       "api_key": "",
       "api_secret": "",
-      "enabled": true,
+      "enabled": false,
       "exchange_type": "kraken",
       "passphrase": "",
       "region_preference": 2,
@@ -22,7 +22,7 @@
     {
       "api_key": "",
       "api_secret": "",
-      "enabled": true,
+      "enabled": false,
       "exchange_type": "kucoin",
       "passphrase": "",
       "region_preference": 3,

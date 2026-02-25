@@ -8,6 +8,12 @@ on:
   pull_request:
     types: [closed]
     branches: [ main ]
+  workflow_dispatch:  # Allow manual triggering for testing
+    inputs:
+      version:
+        description: 'Version to release'
+        required: false
+        default: 'auto'
 
 env:
   PYTHON_VERSION: '3.11'
@@ -166,13 +172,21 @@ jobs:
 
         ## What's New
 
-        This release includes all features from development phases 1-6:
+        This release includes all features from development phases 1-6 plus major advanced analytics:
+
+        ### 🚀 New Advanced Features (Items 26-28)
+        - **Portfolio Optimization Engine** - Modern Portfolio Theory with Sharpe ratio maximization
+        - **Backtesting Framework** - Comprehensive strategy testing with Monte Carlo simulation
+        - **Performance Attribution Engine** - Brinson attribution and factor analysis
+
+        ### 🎯 Core Features
         - Advanced neural network trading algorithms
-        - Professional-grade GUI interface
+        - Professional-grade GUI interface with 12 integrated tabs
         - Real-time market data integration
         - Risk management and paper trading
         - Desktop application integration
         - Improved project structure and organization
+        - Production deployment capabilities
 
         ## System Requirements
 
@@ -442,6 +456,7 @@ jobs:
           - All documentation and guides
           - Installation scripts for all platforms
           - Latest neural network models and configurations
+          - Advanced analytics features (Portfolio Optimization, Backtesting, Performance Attribution)
 
           ### System Requirements
           - Python 3.8+
@@ -452,16 +467,41 @@ jobs:
         draft: false
         prerelease: ${{ contains(steps.version.outputs.VERSION, 'dev') || contains(steps.version.outputs.VERSION, 'beta') }}
 
-    - name: Upload release assets
+    - name: Create GitHub Release and Upload Assets
       if: startsWith(github.ref, 'refs/tags/v')
-      uses: actions/upload-release-asset@v1
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: PowerTrader AI Desktop ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## PowerTraderAI+ Desktop - Release ${{ steps.version.outputs.VERSION }}
+
+          **Release Date:** $(date +'%B %d, %Y')
+          **Build:** ${{ steps.version.outputs.COMMIT }}
+
+          ### 🚀 New Advanced Features
+          - **Portfolio Optimization Engine** - Modern Portfolio Theory implementation with efficient frontier
+          - **Backtesting Framework** - Comprehensive strategy testing with Monte Carlo simulation
+          - **Performance Attribution Engine** - Advanced attribution analysis and risk decomposition
+
+          ### 📊 What's Included
+          - Complete PowerTraderAI+ desktop application
+          - All documentation and advanced features guides
+          - Installation scripts for all platforms
+          - Latest neural network models and configurations
+
+          ### 💻 System Requirements
+          - Python 3.8+
+          - 4GB+ RAM
+          - Internet connection
+
+          See RELEASE_NOTES.md in the download for complete details.
+        files: |
+          release-build/PowerTrader_AI_Desktop_${{ steps.version.outputs.VERSION }}.zip
+        draft: false
+        prerelease: ${{ contains(steps.version.outputs.VERSION, 'dev') || contains(steps.version.outputs.VERSION, 'beta') }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: release-build/PowerTrader_AI_Desktop_${{ steps.version.outputs.VERSION }}.zip
-        asset_name: PowerTrader_AI_Desktop_${{ steps.version.outputs.VERSION }}.zip
-        asset_content_type: application/zip
 
     - name: Summary
       run: |
@@ -486,3 +526,68 @@ jobs:
         echo "- AWS CodeArtifact (if configured)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "The release has been distributed across all configured artifact repositories." >> $GITHUB_STEP_SUMMARY
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/v')
+      with:
+        tag_name: ${{ github.ref }}
+        name: PowerTrader AI Release ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## PowerTrader AI Desktop Application
+
+          A comprehensive trading platform with advanced analytics capabilities.
+
+          ### Quick Start
+          1. Download the ZIP file below
+          2. Extract to your desired location
+          3. Run the appropriate installation script:
+             - Windows: `install.bat`
+             - Linux/Mac: `./install.sh`
+
+          ### Manual Installation
+          \`\`\`bash
+          pip install -r requirements.txt
+          python pt_desktop_app.py
+          \`\`\`
+
+          ## What's New
+
+          This release includes all features from development phases 1-6 plus major advanced analytics:
+
+          ### 🚀 New Advanced Features (Items 26-28)
+          - **Portfolio Optimization Engine** - Modern Portfolio Theory with Sharpe ratio maximization
+          - **Backtesting Framework** - Comprehensive strategy testing with Monte Carlo simulation
+          - **Performance Attribution Engine** - Brinson attribution and factor analysis
+
+          ### 🎯 Core Features
+          - Advanced neural network trading algorithms
+          - Professional-grade GUI interface with 12 integrated tabs
+          - Real-time market data integration
+          - Risk management and paper trading
+          - Desktop application integration
+          - Improved project structure and organization
+          - Production deployment capabilities
+
+          ## System Requirements
+
+          - Python 3.8 or higher
+          - 4GB RAM minimum (8GB recommended)
+
+          ## Security Note
+
+          This release includes SHA256 checksums for verification. Always verify the integrity of downloaded files.
+
+          **Version:** ${{ steps.version.outputs.VERSION }}
+          **Build Date:** ${{ steps.version.outputs.DATE }}
+          **Commit:** ${{ steps.version.outputs.COMMIT }}
+        files: |
+          PowerTrader_AI_Desktop_${{ steps.version.outputs.VERSION }}.zip
+          dist/*.whl
+          dist/*.tar.gz
+          SHA256SUMS.txt
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -4,7 +4,7 @@ This project has been made possible by the following contributors:
 
 ## Project Maintainers
 
-- **Simon Jackson** ([@sjackson0109](https://github.com/sjackson0109)) - Project creator and lead maintainer
+- **Simon Jackson** ([@sjackson0109](https://github.com/sjackson0109)) - Forked-Project creator and lead maintainer
 
 ## Contributors
 
@@ -26,4 +26,4 @@ Special thanks to all community members who have provided feedback, reported iss
 
 ---
 
-*Want to contribute? Check out our [issues](https://github.com/PowerTrader-AI/PowerTrader_AI/issues) for areas where we need help!*
+*Want to contribute? Check out our [issues](https://github.com/sjackson0109/PowerTrader_AI/issues) for areas where we need help!*

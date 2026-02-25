@@ -40,22 +40,54 @@ PowerTraderAI+ now supports **global cryptocurrency trading** across 65+ major e
 
 ## Desktop GUI Quick Start
 
-### 1. Launch Application
+### 1. Install Dependencies (First Time Setup)
+```bash
+# Install core dependencies
+pip install -r requirements.txt
+
+# Install optional dependencies for enhanced features
+python app/install_optional_deps.py
+```
+
+### 2. Launch Application
 ```bash
 cd app
 python pt_hub.py
 ```
 
-### 2. Configure Exchange
+### 3. Configure Exchange
 1. **Settings** menu → **Open Settings Dialog**
 2. Scroll to **Exchange Provider Settings**
 3. Select your **region** and **primary exchange**
 4. Click **Exchange Setup** for credentials
 5. **Save** settings
 
-### 3. Monitor Status
+### 4. Monitor Status
 - Check **Exchange: Connected EXCHANGE_NAME** status indicator
 - Connected = Connected | Limited = Limited | Failed = Failed
+
+## 🔧 Dependency Management
+
+### Quick Dependency Fix
+If you encounter missing modules or features not working:
+```bash
+# Run the automated dependency installer
+python app/install_optional_deps.py
+```
+
+### Optional Features by Package
+- **Real-time Market Data**: `websocket-client`, `ccxt` - Live feeds from 100+ exchanges
+- **Advanced Analytics**: `scipy` - Enhanced risk calculations and statistics
+- **Charts & Visualization**: `seaborn` - Beautiful statistical plots
+- **AI Research**: `openai` - AI-powered market analysis
+
+### Test Installation
+```bash
+# Check all dependencies
+python test_dependencies.py
+```
+
+**Note**: PowerTrader works with core dependencies only, but optional packages unlock enhanced features.
 
 ## Command Line Setup
 

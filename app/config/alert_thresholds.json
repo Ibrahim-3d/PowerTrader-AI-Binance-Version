@@ -1,0 +1,7 @@
+{
+  "max_cpu_percent": 80,
+  "max_error_rate_percent": 5,
+  "max_memory_mb": 1024,
+  "max_response_time_ms": 5000,
+  "min_available_disk_gb": 1
+}

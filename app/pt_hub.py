@@ -35,6 +35,127 @@ except ImportError:
         "Warning: Multi-exchange support not available. Exchange status will be disabled."
     )
 
+# Order management imports
+try:
+    from order_management_integration import (
+        get_global_order_manager,
+        get_order_notifications_for_gui,
+        initialize_order_management_for_powertrader,
+    )
+    from order_management_models import (
+        ConditionOperator,
+        ConditionType,
+        OrderSide,
+        OrderStatus,
+        OrderType,
+    )
+
+    ORDER_MANAGEMENT_AVAILABLE = True
+except ImportError:
+    ORDER_MANAGEMENT_AVAILABLE = False
+    print("Warning: Order management system not available.")
+
+# LLM Research Engine imports
+try:
+    from llm_research_gui import ResearchEngineGUI
+
+    LLM_RESEARCH_AVAILABLE = True
+except ImportError:
+    LLM_RESEARCH_AVAILABLE = False
+    print("Warning: LLM Research Engine not available.")
+
+# Dependency checker
+try:
+    from dependency_checker import get_dependency_checker, quick_check
+
+    DEPENDENCY_CHECKER_AVAILABLE = True
+except ImportError:
+    DEPENDENCY_CHECKER_AVAILABLE = False
+    print("Warning: Dependency checker not available.")
+
+# API Server imports
+try:
+    from pt_api_server import create_api_server
+
+    API_SERVER_AVAILABLE = True
+except ImportError:
+    API_SERVER_AVAILABLE = False
+    print(
+        "Warning: Public API Server not available. Install flask and flask-cors to enable."
+    )
+
+# Long-term Holdings imports
+try:
+    from long_term_holdings_gui import HoldingsManagementGUI
+
+    HOLDINGS_MANAGEMENT_AVAILABLE = True
+except ImportError:
+    HOLDINGS_MANAGEMENT_AVAILABLE = False
+    print("Warning: Holdings Management not available.")
+
+# Portfolio Analytics imports
+try:
+    from portfolio_analytics_gui import PortfolioAnalyticsGUI
+
+    PORTFOLIO_ANALYTICS_AVAILABLE = True
+except ImportError:
+    PORTFOLIO_ANALYTICS_AVAILABLE = False
+    print("Warning: Portfolio Analytics not available.")
+
+# Advanced Order Types imports
+try:
+    from advanced_order_gui import AdvancedOrderGUI
+
+    ADVANCED_ORDER_AVAILABLE = True
+except ImportError:
+    ADVANCED_ORDER_AVAILABLE = False
+    print("Warning: Advanced Order Types not available.")
+
+# Real-time Market Data imports
+try:
+    from real_time_market_data_gui import MarketDataGUI
+
+    MARKET_DATA_GUI_AVAILABLE = True
+except ImportError:
+    MARKET_DATA_GUI_AVAILABLE = False
+    print("Warning: Real-time Market Data GUI not available.")
+
+# Portfolio Optimization imports
+try:
+    from portfolio_optimizer_gui import PortfolioOptimizerGUI
+
+    PORTFOLIO_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    PORTFOLIO_OPTIMIZER_AVAILABLE = False
+    print("Warning: Portfolio Optimization Engine not available.")
+
+# Backtesting Framework imports
+try:
+    from backtesting_gui import BacktestingGUI
+
+    BACKTESTING_FRAMEWORK_AVAILABLE = True
+except ImportError:
+    BACKTESTING_FRAMEWORK_AVAILABLE = False
+    print("Warning: Backtesting Framework not available.")
+
+# Performance Attribution imports
+try:
+    from performance_attribution_gui import PerformanceAttributionGUI
+
+    PERFORMANCE_ATTRIBUTION_AVAILABLE = True
+except ImportError:
+    PERFORMANCE_ATTRIBUTION_AVAILABLE = False
+    print("Warning: Performance Attribution Engine not available.")
+
+# Institutional Trading imports
+try:
+    from institutional_trading_gui import InstitutionalTradingGUI
+
+    INSTITUTIONAL_TRADING_AVAILABLE = True
+except ImportError:
+    INSTITUTIONAL_TRADING_AVAILABLE = False
+    print("Warning: Institutional Trading System not available.")
+
 DARK_BG = "#070B10"
 DARK_BG2 = "#0B1220"
 DARK_PANEL = "#0E1626"
@@ -46,6 +167,28 @@ DARK_ACCENT = "#00FF66"
 DARK_ACCENT2 = "#00E5FF"
 DARK_SELECT_BG = "#17324A"
 DARK_SELECT_FG = "#00FF66"
+
+
+def _atomic_write_json(path: str, data: dict) -> None:
+    """Atomic JSON writing to prevent corruption during concurrent operations."""
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)  # Atomic operation on Windows/Unix
+    except Exception:
+        pass
+
+
+def _atomic_write_text(path: str, content: str) -> None:
+    """Atomic text writing to prevent corruption during concurrent operations."""
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)  # Atomic operation on Windows/Unix
+    except Exception:
+        pass
 
 
 @dataclass
@@ -367,6 +510,10 @@ DEFAULT_SETTINGS = {
     "script_neural_trainer": "pt_trainer.py",
     "script_trader": "pt_trader.py",
     "auto_start_scripts": False,
+    # --- Public API Server Settings ---
+    "api_server_enabled": False,  # Enable public REST API server
+    "api_server_host": "127.0.0.1",  # API server host (127.0.0.1 for localhost only)
+    "api_server_port": 8080,  # API server port
 }
 
 
@@ -615,10 +762,12 @@ class CandleFetcher:
 
             self._requests = requests
 
-        # Small in-memory cache to keep timeframe switching snappy.
-        # key: (pair, timeframe, limit) -> (saved_time_epoch, candles)
-        self._cache: Dict[Tuple[str, str, int], Tuple[float, List[dict]]] = {}
+        # Enhanced in-memory cache with automatic cleanup
+        # key: (pair, timeframe, limit) -> (saved_time_epoch, candles, access_count)
+        self._cache: Dict[Tuple[str, str, int], Tuple[float, List[dict], int]] = {}
         self._cache_ttl_seconds: float = 10.0
+        self._cache_max_entries: int = 50  # Prevent unlimited memory growth
+        self._cache_cleanup_threshold: int = 60  # Clean up when we exceed this
 
     def get_klines(self, symbol: str, timeframe: str, limit: int = 120) -> List[dict]:
         """
@@ -634,8 +783,19 @@ class CandleFetcher:
         now = time.time()
         cache_key = (pair, timeframe, limit)
         cached = self._cache.get(cache_key)
-        if cached and (now - float(cached[0])) <= float(self._cache_ttl_seconds):
+        if (
+            cached
+            and len(cached) >= 2
+            and (now - float(cached[0])) <= float(self._cache_ttl_seconds)
+        ):
+            # Update access count for LRU cleanup
+            access_count = cached[2] + 1 if len(cached) > 2 else 1
+            self._cache[cache_key] = (cached[0], cached[1], access_count)
             return cached[1]
+
+        # Clean up cache if it gets too large
+        if len(self._cache) > self._cache_cleanup_threshold:
+            self._cleanup_cache()
 
         # rough window (timeframe-dependent) so we get enough candles
         tf_seconds = {
@@ -683,7 +843,7 @@ class CandleFetcher:
                 if limit and len(candles) > limit:
                     candles = candles[-limit:]
 
-                self._cache[cache_key] = (now, candles)
+                self._cache[cache_key] = (now, candles, 1)
                 return candles
             except Exception:
                 return []
@@ -712,10 +872,36 @@ class CandleFetcher:
             if limit and len(candles) > limit:
                 candles = candles[-limit:]
 
-            self._cache[cache_key] = (now, candles)
+            self._cache[cache_key] = (now, candles, 1)
             return candles
         except Exception:
             return []
+
+    def _cleanup_cache(self) -> None:
+        """Clean up old cache entries to prevent unlimited memory growth."""
+        try:
+            now = time.time()
+            # Remove expired entries first
+            expired_keys = [
+                k
+                for k, v in self._cache.items()
+                if len(v) >= 1 and (now - float(v[0])) > self._cache_ttl_seconds
+            ]
+            for k in expired_keys:
+                del self._cache[k]
+
+            # If still too many, remove least recently used entries
+            if len(self._cache) > self._cache_max_entries:
+                # Sort by access count (ascending) to remove least used
+                sorted_items = sorted(
+                    self._cache.items(), key=lambda x: x[1][2] if len(x[1]) > 2 else 0
+                )
+                # Keep only the most accessed entries
+                keep_count = self._cache_max_entries
+                self._cache = dict(sorted_items[-keep_count:])
+        except Exception:
+            # If cleanup fails, clear entire cache as fallback
+            self._cache.clear()
 
 
 # -----------------------------
@@ -874,21 +1060,44 @@ class CandleChart(ttk.Frame):
         low_path = os.path.join(folder, "low_bound_prices.html")
         high_path = os.path.join(folder, "high_bound_prices.html")
 
-        # --- Cached neural reads (per path, by mtime) ---
+        # --- Enhanced cached neural reads (per path, by mtime with corruption protection) ---
         if not hasattr(self, "_neural_cache"):
-            self._neural_cache = {}  # path -> (mtime, value)
+            self._neural_cache = {}  # path -> (mtime, value, error_count)
+            self._neural_cache_max_errors = 3
 
         def _cached(path: str, loader, default):
+            """Enhanced caching with corruption protection and error tracking."""
             try:
                 mtime = os.path.getmtime(path)
+                # Check for .tmp files indicating interrupted writes
+                tmp_path = path + ".tmp"
+                if os.path.exists(tmp_path):
+                    # Clean up interrupted atomic write
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
             except Exception:
                 return default
+
             hit = self._neural_cache.get(path)
-            if hit and hit[0] == mtime:
+            if hit and len(hit) >= 2 and hit[0] == mtime:
+                # Reset error count on successful cache hit
+                if len(hit) > 2 and hit[2] > 0:
+                    self._neural_cache[path] = (hit[0], hit[1], 0)
                 return hit[1]
-            v = loader(path)
-            self._neural_cache[path] = (mtime, v)
-            return v
+
+            # Load with error tracking
+            try:
+                v = loader(path)
+                self._neural_cache[path] = (mtime, v, 0)
+                return v
+            except Exception as e:
+                # Track errors to avoid repeatedly trying corrupted files
+                error_count = hit[2] + 1 if hit and len(hit) > 2 else 1
+                if error_count < self._neural_cache_max_errors:
+                    self._neural_cache[path] = (mtime, default, error_count)
+                return default
 
         long_levels = (
             _cached(low_path, read_price_levels_from_html, []) if folder else []
@@ -1623,6 +1832,28 @@ class PowerTraderHub(tk.Tk):
 
         self.settings = self._load_settings()
 
+        # Enhanced training status tracking with atomic operations
+        def _write_training_status(coin: str, state: str, **kwargs) -> None:
+            """Write training status with atomic operations to prevent corruption."""
+            status_data = {
+                "coin": coin,
+                "state": state,  # TRAINING, FINISHED, ERROR, NOT_STARTED
+                "timestamp": int(time.time()),
+                **kwargs,
+            }
+
+            # Try to write to coin-specific status file
+            try:
+                coin_dir = os.path.join(self.settings["main_neural_dir"], coin)
+                if os.path.exists(coin_dir):
+                    status_path = os.path.join(coin_dir, "trainer_status.json")
+                    _atomic_write_json(status_path, status_data)
+            except Exception:
+                pass  # Non-critical status write failure
+
+        # Store the training status writer for use by other components
+        self._write_training_status = _write_training_status
+
         self.project_dir = os.path.abspath(os.path.dirname(__file__))
 
         main_dir = str(self.settings.get("main_neural_dir") or "").strip()
@@ -1703,6 +1934,18 @@ class PowerTraderHub(tk.Tk):
         if EXCHANGE_SUPPORT_AVAILABLE:
             self._init_exchange_system()
 
+        # Initialize Public API Server
+        self._api_server = None
+        self._api_server_enabled = bool(self.settings.get("api_server_enabled", False))
+        self._api_server_port = int(self.settings.get("api_server_port", 8080))
+        self._api_server_host = self.settings.get("api_server_host", "127.0.0.1")
+
+        if self._api_server_enabled:
+            self._init_api_server()
+
+        # Run startup dependency check
+        self._run_startup_dependency_check()
+
         self._build_menu()
         self._build_layout()
 
@@ -1713,6 +1956,10 @@ class PowerTraderHub(tk.Tk):
 
         if bool(self.settings.get("auto_start_scripts", False)):
             self.start_all_scripts()
+
+        # Auto-start API server if enabled
+        if API_SERVER_AVAILABLE and self.settings.get("api_server_enabled", False):
+            self.start_api_server()
 
         self.after(250, self._tick)
 
@@ -2089,6 +2336,22 @@ class PowerTraderHub(tk.Tk):
         m_settings.add_command(label="Settings...", command=self.open_settings_dialog)
         menubar.add_cascade(label="Settings", menu=m_settings)
 
+        # Help menu
+        m_help = tk.Menu(
+            menubar,
+            tearoff=0,
+            bg=DARK_BG2,
+            fg=DARK_FG,
+            activebackground=DARK_SELECT_BG,
+            activeforeground=DARK_SELECT_FG,
+        )
+        m_help.add_command(
+            label="Dependency Status", command=self.show_dependency_status
+        )
+        m_help.add_separator()
+        m_help.add_command(label="About PowerTrader", command=self.show_about)
+        menubar.add_cascade(label="Help", menu=m_help)
+
         m_file = tk.Menu(
             menubar,
             tearoff=0,
@@ -2201,9 +2464,6 @@ class PowerTraderHub(tk.Tk):
                 self._schedule_paned_clamp(getattr(self, "_pw_outer", None)),
                 self._schedule_paned_clamp(getattr(self, "_pw_left_split", None)),
                 self._schedule_paned_clamp(getattr(self, "_pw_right_split", None)),
-                self._schedule_paned_clamp(
-                    getattr(self, "_pw_right_bottom_split", None)
-                ),
             ),
         )
 
@@ -2882,25 +3142,18 @@ class PowerTraderHub(tk.Tk):
         self._show_chart_page("ACCOUNT")
 
         # ----------------------------
-        # RIGHT BOTTOM: Current Trades + Trade History (stacked)
+        # RIGHT BOTTOM: Tabbed Interface (Current Trades + Long-term Holdings + Trade History)
         # ----------------------------
-        right_bottom_split = ttk.Panedwindow(right_split, orient="vertical")
-        self._pw_right_bottom_split = right_bottom_split
+        self.bottom_notebook = ttk.Notebook(right_split)
 
-        right_bottom_split.bind(
-            "<Configure>",
-            lambda e: self._schedule_paned_clamp(self._pw_right_bottom_split),
-        )
-        right_bottom_split.bind(
-            "<ButtonRelease-1>",
-            lambda e: (
-                setattr(self, "_user_moved_right_bottom_split", True),
-                self._schedule_paned_clamp(self._pw_right_bottom_split),
-            ),
-        )
+        # ----------------------------
+        # TAB 1: Current Trades
+        # ----------------------------
+        trades_tab = ttk.Frame(self.bottom_notebook)
+        self.bottom_notebook.add(trades_tab, text="Current Trades")
 
-        # Current trades (top)
-        trades_frame = ttk.LabelFrame(right_bottom_split, text="Current Trades")
+        trades_frame = ttk.LabelFrame(trades_tab, text="Current Trades")
+        trades_frame.pack(fill="both", expand=True, padx=6, pady=6)
 
         cols = (
             "coin",
@@ -3004,8 +3257,143 @@ class PowerTraderHub(tk.Tk):
         )
         self.after_idle(_resize_trades_columns)
 
-        # Trade history (bottom)
-        hist_frame = ttk.LabelFrame(right_bottom_split, text="Trade History (scroll)")
+        # ----------------------------
+        # TAB 2: Long-term Holdings
+        # ----------------------------
+        lth_tab = ttk.Frame(self.bottom_notebook)
+        self.bottom_notebook.add(lth_tab, text="Long-term Holdings")
+
+        lth_frame = ttk.LabelFrame(
+            lth_tab, text="Long-term Holdings (Manual/HODL Positions)"
+        )
+        lth_frame.pack(fill="both", expand=True, padx=6, pady=6)
+
+        lth_cols = (
+            "coin",
+            "qty",
+            "value",
+            "avg_cost",
+            "current_price",
+            "total_pnl",
+            "pnl_pct",
+            "allocation",
+        )
+
+        lth_headers = {
+            "coin": "Coin",
+            "qty": "Quantity",
+            "value": "Current Value",
+            "avg_cost": "Avg Cost",
+            "current_price": "Current Price",
+            "total_pnl": "Total P&L",
+            "pnl_pct": "P&L %",
+            "allocation": "% of Portfolio",
+        }
+
+        lth_table_wrap = ttk.Frame(lth_frame)
+        lth_table_wrap.pack(fill="both", expand=True, padx=6, pady=6)
+
+        self.lth_tree = ttk.Treeview(
+            lth_table_wrap, columns=lth_cols, show="headings", height=10
+        )
+        for c in lth_cols:
+            self.lth_tree.heading(c, text=lth_headers.get(c, c))
+            self.lth_tree.column(c, width=110, anchor="center", stretch=True)
+
+        # Set reasonable column widths for LTH table
+        self.lth_tree.column("coin", width=70)
+        self.lth_tree.column("qty", width=100)
+        self.lth_tree.column("value", width=110)
+        self.lth_tree.column("avg_cost", width=90)
+        self.lth_tree.column("current_price", width=90)
+        self.lth_tree.column("total_pnl", width=100)
+        self.lth_tree.column("pnl_pct", width=80)
+        self.lth_tree.column("allocation", width=90)
+
+        lth_ysb = ttk.Scrollbar(
+            lth_table_wrap, orient="vertical", command=self.lth_tree.yview
+        )
+        lth_xsb = ttk.Scrollbar(
+            lth_table_wrap, orient="horizontal", command=self.lth_tree.xview
+        )
+        self.lth_tree.configure(yscrollcommand=lth_ysb.set, xscrollcommand=lth_xsb.set)
+
+        self.lth_tree.pack(side="top", fill="both", expand=True)
+        lth_xsb.pack(side="bottom", fill="x")
+        lth_ysb.pack(side="right", fill="y")
+
+        # Trade history (now in its own tab)
+        hist_tab = ttk.Frame(self.bottom_notebook)
+        self.bottom_notebook.add(hist_tab, text="Trade History")
+
+        hist_frame = ttk.LabelFrame(hist_tab, text="Trade History (Scroll)")
+        hist_frame.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Add filter/search controls for trade history
+        hist_controls = ttk.Frame(hist_frame)
+        hist_controls.pack(fill="x", padx=6, pady=(6, 0))
+
+        # ----------------------------
+        # TAB 4: Order Management
+        # ----------------------------
+        if ORDER_MANAGEMENT_AVAILABLE:
+            self._create_order_management_tab()
+
+        # ----------------------------
+        # TAB 5: LLM Research Engine
+        # ----------------------------
+        self._create_llm_research_tab()
+
+        # ----------------------------
+        # TAB 6: Holdings Management
+        # ----------------------------
+        self._create_holdings_management_tab()
+
+        # ----------------------------
+        # TAB 7: Portfolio Analytics
+        # ----------------------------
+        self._create_portfolio_analytics_tab()
+
+        # ----------------------------
+        # TAB 8: Advanced Order Types
+        # ----------------------------
+        self._create_advanced_order_tab()
+
+        # ----------------------------
+        # TAB 9: Real-time Market Data
+        # ----------------------------
+        self._create_market_data_tab()
+
+        # ----------------------------
+        # TAB 10: Portfolio Optimization
+        # ----------------------------
+        self._create_portfolio_optimization_tab()
+
+        # ----------------------------
+        # TAB 11: Backtesting Framework
+        # ----------------------------
+        self._create_backtesting_tab()
+
+        # ----------------------------
+        # TAB 12: Performance Attribution
+        # ----------------------------
+        self._create_performance_attribution_tab()
+
+        # ----------------------------
+        # TAB 13: Institutional Trading
+        # ----------------------------
+        self._create_institutional_trading_tab()
+
+        ttk.Label(hist_controls, text="Filter:").pack(side="left")
+        self.hist_filter_var = tk.StringVar()
+        hist_filter_entry = ttk.Entry(
+            hist_controls, textvariable=self.hist_filter_var, width=20
+        )
+        hist_filter_entry.pack(side="left", padx=(4, 8))
+
+        ttk.Button(
+            hist_controls, text="Clear", command=lambda: self.hist_filter_var.set("")
+        ).pack(side="left")
 
         hist_wrap = ttk.Frame(hist_frame)
         hist_wrap.pack(fill="both", expand=True, padx=6, pady=6)
@@ -3033,21 +3421,12 @@ class PowerTraderHub(tk.Tk):
 
         # Assemble right side
         right_split.add(charts_frame, weight=3)
-        right_split.add(right_bottom_split, weight=2)
-
-        right_bottom_split.add(trades_frame, weight=2)
-        right_bottom_split.add(hist_frame, weight=1)
+        right_split.add(self.bottom_notebook, weight=2)
 
         try:
             # Screenshot-style sizing: don't force Charts to be enormous by default.
             right_split.paneconfigure(charts_frame, minsize=360)
-            right_split.paneconfigure(right_bottom_split, minsize=220)
-        except Exception:
-            pass
-
-        try:
-            right_bottom_split.paneconfigure(trades_frame, minsize=140)
-            right_bottom_split.paneconfigure(hist_frame, minsize=120)
+            right_split.paneconfigure(self.bottom_notebook, minsize=220)
         except Exception:
             pass
 
@@ -3075,33 +3454,12 @@ class PowerTraderHub(tk.Tk):
                 self._did_init_right_split_sash = True
             except Exception:
                 pass
-
-        def _init_right_bottom_split_sash_once():
-            try:
-                if getattr(self, "_did_init_right_bottom_split_sash", False):
-                    return
-
-                if getattr(self, "_user_moved_right_bottom_split", False):
-                    self._did_init_right_bottom_split_sash = True
-                    return
-
-                total = right_bottom_split.winfo_height()
-                if total <= 2:
-                    self.after(10, _init_right_bottom_split_sash_once)
-                    return
-
-                min_top = 140
-                min_bottom = 120
-                desired_top = 280  # more space for Current Trades (like screenshot)
-                target = max(min_top, min(total - min_bottom, desired_top))
-
-                right_bottom_split.sashpos(0, int(target))
-                self._did_init_right_bottom_split_sash = True
-            except Exception:
                 pass
 
         self.after_idle(_init_right_split_sash_once)
-        self.after_idle(_init_right_bottom_split_sash_once)
+
+        # Create a placeholder LTH refresh method (will be implemented in Phase 3)
+        self._refresh_lth_status = lambda: None
 
         # Initial clamp once everything is laid out
         self.after_idle(
@@ -3109,9 +3467,6 @@ class PowerTraderHub(tk.Tk):
                 self._schedule_paned_clamp(getattr(self, "_pw_outer", None)),
                 self._schedule_paned_clamp(getattr(self, "_pw_left_split", None)),
                 self._schedule_paned_clamp(getattr(self, "_pw_right_split", None)),
-                self._schedule_paned_clamp(
-                    getattr(self, "_pw_right_bottom_split", None)
-                ),
             )
         )
 
@@ -3280,6 +3635,1248 @@ class PowerTraderHub(tk.Tk):
             p.proc.terminate()
         except Exception:
             pass
+
+    def _create_order_management_tab(self):
+        """Create the Order Management tab with order creation forms and monitoring."""
+        try:
+            # Initialize order manager
+            self.order_manager = get_global_order_manager()
+
+            # Create tab even if order manager isn't fully available
+            order_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(order_tab, text="Order Management")
+
+            if not self.order_manager.is_available:
+                # Show a message about limited functionality
+                ttk.Label(
+                    order_tab,
+                    text="Order Management System Not Available\n\nSQLAlchemy dependency required for full functionality.\nInstall with: pip install sqlalchemy",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                return
+
+            # Start monitoring if not already started
+            self.order_manager.start_monitoring()
+
+            # Main container with splitter
+            order_paned = ttk.PanedWindow(order_tab, orient="horizontal")
+            order_paned.pack(fill="both", expand=True, padx=6, pady=6)
+
+            # Left panel: Order creation forms
+            left_frame = ttk.LabelFrame(order_paned, text="Create Orders")
+            order_paned.add(left_frame, weight=1)
+
+            # Order type selection
+            type_frame = ttk.Frame(left_frame)
+            type_frame.pack(fill="x", padx=6, pady=6)
+
+            ttk.Label(type_frame, text="Order Type:").pack(side="left")
+            self.order_type_var = tk.StringVar(value="Stop Loss")
+            order_type_combo = ttk.Combobox(
+                type_frame,
+                textvariable=self.order_type_var,
+                values=["Stop Loss", "Take Profit", "DCA Order", "Conditional"],
+                state="readonly",
+                width=15,
+            )
+            order_type_combo.pack(side="left", padx=(6, 0))
+            order_type_combo.bind("<<ComboboxSelected>>", self._on_order_type_changed)
+
+            # Symbol input
+            symbol_frame = ttk.Frame(left_frame)
+            symbol_frame.pack(fill="x", padx=6, pady=(0, 6))
+
+            ttk.Label(symbol_frame, text="Symbol:").pack(side="left")
+            self.symbol_var = tk.StringVar(value="BTCUSDT")
+            symbol_entry = ttk.Entry(
+                symbol_frame, textvariable=self.symbol_var, width=12
+            )
+            symbol_entry.pack(side="left", padx=(6, 0))
+
+            # Quantity input
+            qty_frame = ttk.Frame(left_frame)
+            qty_frame.pack(fill="x", padx=6, pady=(0, 6))
+
+            ttk.Label(qty_frame, text="Quantity:").pack(side="left")
+            self.quantity_var = tk.StringVar(value="0.001")
+            qty_entry = ttk.Entry(qty_frame, textvariable=self.quantity_var, width=12)
+            qty_entry.pack(side="left", padx=(6, 0))
+
+            # Price input frame (dynamic content based on order type)
+            self.price_frame = ttk.Frame(left_frame)
+            self.price_frame.pack(fill="x", padx=6, pady=(0, 6))
+
+            # Condition frame (for conditional orders)
+            self.condition_frame = ttk.Frame(left_frame)
+            self.condition_frame.pack(fill="x", padx=6, pady=(0, 6))
+
+            # Initialize price controls for default order type
+            self._update_order_form()
+
+            # Create order button
+            create_btn = ttk.Button(
+                left_frame, text="Create Order", command=self._create_order_from_form
+            )
+            create_btn.pack(pady=10)
+
+            # Right panel: Active orders and monitoring
+            right_frame = ttk.LabelFrame(order_paned, text="Active Orders")
+            order_paned.add(right_frame, weight=2)
+
+            # Orders table
+            orders_frame = ttk.Frame(right_frame)
+            orders_frame.pack(fill="both", expand=True, padx=6, pady=6)
+
+            order_cols = (
+                "id",
+                "symbol",
+                "type",
+                "side",
+                "quantity",
+                "price",
+                "status",
+                "conditions",
+                "created",
+            )
+
+            order_headers = {
+                "id": "Order ID",
+                "symbol": "Symbol",
+                "type": "Type",
+                "side": "Side",
+                "quantity": "Quantity",
+                "price": "Price",
+                "status": "Status",
+                "conditions": "Conditions",
+                "created": "Created",
+            }
+
+            self.orders_tree = ttk.Treeview(
+                orders_frame, columns=order_cols, show="headings", height=10
+            )
+            for c in order_cols:
+                self.orders_tree.heading(c, text=order_headers.get(c, c))
+                self.orders_tree.column(c, width=80, anchor="center", stretch=True)
+
+            # Set specific column widths
+            self.orders_tree.column("id", width=100)
+            self.orders_tree.column("symbol", width=80)
+            self.orders_tree.column("type", width=90)
+            self.orders_tree.column("side", width=50)
+            self.orders_tree.column("quantity", width=80)
+            self.orders_tree.column("price", width=80)
+            self.orders_tree.column("status", width=70)
+            self.orders_tree.column("conditions", width=120)
+            self.orders_tree.column("created", width=120)
+
+            # Scrollbars for orders table
+            orders_ysb = ttk.Scrollbar(
+                orders_frame, orient="vertical", command=self.orders_tree.yview
+            )
+            orders_xsb = ttk.Scrollbar(
+                orders_frame, orient="horizontal", command=self.orders_tree.xview
+            )
+            self.orders_tree.configure(
+                yscrollcommand=orders_ysb.set, xscrollcommand=orders_xsb.set
+            )
+
+            self.orders_tree.pack(side="top", fill="both", expand=True)
+            orders_xsb.pack(side="bottom", fill="x")
+            orders_ysb.pack(side="right", fill="y")
+
+            # Order control buttons
+            control_frame = ttk.Frame(right_frame)
+            control_frame.pack(fill="x", padx=6, pady=(0, 6))
+
+            ttk.Button(
+                control_frame, text="Refresh", command=self._refresh_orders
+            ).pack(side="left", padx=(0, 6))
+            ttk.Button(
+                control_frame,
+                text="Cancel Selected",
+                command=self._cancel_selected_order,
+            ).pack(side="left", padx=(0, 6))
+
+            # Notifications area
+            notif_frame = ttk.LabelFrame(right_frame, text="Recent Notifications")
+            notif_frame.pack(fill="x", padx=6, pady=(6, 0))
+
+            # Create notification text widget with scrollbar
+            notif_text_frame = ttk.Frame(notif_frame)
+            notif_text_frame.pack(fill="x", padx=6, pady=6)
+
+            self.notifications_text = tk.Text(
+                notif_text_frame,
+                height=4,
+                wrap="word",
+                bg=DARK_BG2,
+                fg=DARK_FG,
+                insertbackground=DARK_FG,
+            )
+            notif_scroll = ttk.Scrollbar(
+                notif_text_frame,
+                orient="vertical",
+                command=self.notifications_text.yview,
+            )
+            self.notifications_text.configure(yscrollcommand=notif_scroll.set)
+
+            self.notifications_text.pack(side="left", fill="x", expand=True)
+            notif_scroll.pack(side="right", fill="y")
+
+            # Set initial pane sizes
+            try:
+                order_paned.pane(left_frame, minsize=300)
+                order_paned.pane(right_frame, minsize=400)
+            except Exception:
+                # Fallback for different tkinter versions
+                pass
+
+            # Initial data load
+            self._refresh_orders()
+            self._refresh_notifications()
+
+            # Schedule periodic updates
+            self._schedule_order_updates()
+
+        except Exception as e:
+            print(f"Error creating order management tab: {e}")
+
+    def _on_order_type_changed(self, event=None):
+        """Handle order type selection change."""
+        self._update_order_form()
+
+    def _update_order_form(self):
+        """Update the order form based on selected order type."""
+        try:
+            # Clear existing widgets
+            for widget in self.price_frame.winfo_children():
+                widget.destroy()
+            for widget in self.condition_frame.winfo_children():
+                widget.destroy()
+
+            order_type = self.order_type_var.get()
+
+            if order_type == "Stop Loss":
+                # Stop price input
+                ttk.Label(self.price_frame, text="Stop Price:").pack(side="left")
+                self.stop_price_var = tk.StringVar(value="45000")
+                ttk.Entry(
+                    self.price_frame, textvariable=self.stop_price_var, width=12
+                ).pack(side="left", padx=(6, 0))
+
+                # Optional limit price
+                ttk.Label(self.price_frame, text="Limit Price (optional):").pack(
+                    side="left", padx=(12, 0)
+                )
+                self.limit_price_var = tk.StringVar()
+                ttk.Entry(
+                    self.price_frame, textvariable=self.limit_price_var, width=12
+                ).pack(side="left", padx=(6, 0))
+
+            elif order_type == "Take Profit":
+                # Target price input
+                ttk.Label(self.price_frame, text="Target Price:").pack(side="left")
+                self.target_price_var = tk.StringVar(value="50000")
+                ttk.Entry(
+                    self.price_frame, textvariable=self.target_price_var, width=12
+                ).pack(side="left", padx=(6, 0))
+
+            elif order_type == "DCA Order":
+                # DCA specific fields
+                ttk.Label(self.price_frame, text="DCA Stage:").pack(side="left")
+                self.dca_stage_var = tk.StringVar(value="1")
+                ttk.Entry(
+                    self.price_frame, textvariable=self.dca_stage_var, width=6
+                ).pack(side="left", padx=(6, 0))
+
+                ttk.Label(self.condition_frame, text="Neural Level:").pack(side="left")
+                self.neural_level_var = tk.StringVar(value="7")
+                ttk.Entry(
+                    self.condition_frame, textvariable=self.neural_level_var, width=6
+                ).pack(side="left", padx=(6, 0))
+
+            elif order_type == "Conditional":
+                # Condition type selection
+                ttk.Label(self.condition_frame, text="Condition:").pack(side="left")
+                self.condition_type_var = tk.StringVar(value="Price")
+                condition_combo = ttk.Combobox(
+                    self.condition_frame,
+                    textvariable=self.condition_type_var,
+                    values=["Price", "Neural Level", "Volume"],
+                    state="readonly",
+                    width=10,
+                )
+                condition_combo.pack(side="left", padx=(6, 0))
+
+                # Operator selection
+                ttk.Label(self.condition_frame, text="Operator:").pack(
+                    side="left", padx=(12, 0)
+                )
+                self.condition_operator_var = tk.StringVar(value=">=")
+                op_combo = ttk.Combobox(
+                    self.condition_frame,
+                    textvariable=self.condition_operator_var,
+                    values=[">=", "<=", "==", ">", "<"],
+                    state="readonly",
+                    width=6,
+                )
+                op_combo.pack(side="left", padx=(6, 0))
+
+                # Target value
+                ttk.Label(self.condition_frame, text="Value:").pack(
+                    side="left", padx=(12, 0)
+                )
+                self.condition_value_var = tk.StringVar(value="50000")
+                ttk.Entry(
+                    self.condition_frame,
+                    textvariable=self.condition_value_var,
+                    width=12,
+                ).pack(side="left", padx=(6, 0))
+
+        except Exception as e:
+            print(f"Error updating order form: {e}")
+
+    def _create_order_from_form(self):
+        """Create an order based on form inputs."""
+        try:
+            if (
+                not hasattr(self, "order_manager")
+                or not self.order_manager.is_available
+            ):
+                messagebox.showerror("Error", "Order management system not available")
+                return
+
+            symbol = self.symbol_var.get().strip().upper()
+            quantity = float(self.quantity_var.get())
+            order_type = self.order_type_var.get()
+
+            if not symbol or quantity <= 0:
+                messagebox.showerror("Error", "Please enter valid symbol and quantity")
+                return
+
+            order_id = None
+
+            if order_type == "Stop Loss":
+                stop_price = float(self.stop_price_var.get())
+                limit_price = None
+                if (
+                    hasattr(self, "limit_price_var")
+                    and self.limit_price_var.get().strip()
+                ):
+                    limit_price = float(self.limit_price_var.get())
+
+                from decimal import Decimal
+
+                order_id = self.order_manager.create_stop_loss_order(
+                    symbol,
+                    Decimal(str(quantity)),
+                    Decimal(str(stop_price)),
+                    Decimal(str(limit_price)) if limit_price else None,
+                )
+
+            elif order_type == "Take Profit":
+                target_price = float(self.target_price_var.get())
+                from decimal import Decimal
+
+                order_id = self.order_manager.create_take_profit_order(
+                    symbol, Decimal(str(quantity)), Decimal(str(target_price))
+                )
+
+            elif order_type == "DCA Order":
+                dca_stage = int(self.dca_stage_var.get())
+                neural_level = int(self.neural_level_var.get())
+                from decimal import Decimal
+
+                order_id = self.order_manager.create_dca_order(
+                    symbol, Decimal(str(quantity)), dca_stage, neural_level
+                )
+
+            elif order_type == "Conditional":
+                # Create conditional order with specified conditions
+                from decimal import Decimal
+
+                from order_management_models import (
+                    ConditionOperator,
+                    ConditionType,
+                    OrderSide,
+                )
+                from order_management_models import OrderType as OMOrderType
+
+                order = self.order_manager.db.create_order(
+                    symbol=symbol,
+                    order_type=OMOrderType.CONDITIONAL,
+                    side=OrderSide.BUY,  # Default to BUY for now
+                    quantity=Decimal(str(quantity)),
+                )
+                order_id = order.id
+
+                # Add condition
+                condition_type_str = self.condition_type_var.get()
+                condition_type = {
+                    "Price": ConditionType.PRICE,
+                    "Neural Level": ConditionType.NEURAL_LEVEL,
+                    "Volume": ConditionType.VOLUME,
+                }.get(condition_type_str, ConditionType.PRICE)
+
+                operator_str = self.condition_operator_var.get()
+                operator = {
+                    ">=": ConditionOperator.GTE,
+                    "<=": ConditionOperator.LTE,
+                    "==": ConditionOperator.EQ,
+                    ">": ConditionOperator.GT,
+                    "<": ConditionOperator.LT,
+                }.get(operator_str, ConditionOperator.GTE)
+
+                target_value = Decimal(str(float(self.condition_value_var.get())))
+
+                self.order_manager.db.add_condition_to_order(
+                    order_id, condition_type, operator, target_value, symbol=symbol
+                )
+
+            if order_id:
+                messagebox.showinfo(
+                    "Success", f"Order created successfully: {order_id}"
+                )
+                self._refresh_orders()
+
+                # Clear form
+                self.symbol_var.set("BTCUSDT")
+                self.quantity_var.set("0.001")
+            else:
+                messagebox.showerror("Error", "Failed to create order")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create order: {str(e)}")
+
+    def _refresh_orders(self):
+        """Refresh the active orders table."""
+        try:
+            if (
+                not hasattr(self, "order_manager")
+                or not self.order_manager.is_available
+            ):
+                return
+
+            # Clear existing items
+            for item in self.orders_tree.get_children():
+                self.orders_tree.delete(item)
+
+            # Get active orders
+            active_orders = self.order_manager.get_active_orders()
+
+            for order in active_orders:
+                # Format conditions text
+                conditions_text = ""
+                if order.get("conditions"):
+                    cond_parts = []
+                    for cond in order["conditions"]:
+                        cond_parts.append(
+                            f"{cond['condition_type'].value} {cond['operator'].value} {cond['target_value']}"
+                        )
+                    conditions_text = "; ".join(cond_parts)
+
+                # Format created time
+                created_at = order.get("created_at")
+                created_str = created_at.strftime("%m/%d %H:%M") if created_at else ""
+
+                # Insert into tree
+                order_id_str = str(order["id"])
+                self.orders_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        order_id_str[:8] + "...",  # Truncated ID
+                        order["symbol"],
+                        order["order_type"].value,
+                        order["side"].value,
+                        f"{order['quantity']}",
+                        f"{order.get('price') or order.get('stop_price') or 'N/A'}",
+                        order["status"].value,
+                        conditions_text[:20] + "..."
+                        if len(conditions_text) > 20
+                        else conditions_text,
+                        created_str,
+                    ),
+                )
+
+        except Exception as e:
+            print(f"Error refreshing orders: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _cancel_selected_order(self):
+        """Cancel the selected order."""
+        try:
+            selection = self.orders_tree.selection()
+            if not selection:
+                messagebox.showwarning(
+                    "No Selection", "Please select an order to cancel"
+                )
+                return
+
+            # Get the order ID from the selected item
+            item_values = self.orders_tree.item(selection[0])["values"]
+            truncated_id = item_values[0]
+
+            # Find full order ID (this is a simplified approach)
+            active_orders = self.order_manager.get_active_orders()
+            full_order_id = None
+
+            for order in active_orders:
+                if str(order["id"]).startswith(truncated_id.replace("...", "")):
+                    full_order_id = str(order["id"])
+                    break
+
+            if not full_order_id:
+                messagebox.showerror("Error", "Could not find order to cancel")
+                return
+
+            # Confirm cancellation
+            if messagebox.askyesno("Confirm", f"Cancel order {truncated_id}?"):
+                if self.order_manager.cancel_order(full_order_id):
+                    messagebox.showinfo("Success", "Order cancelled successfully")
+                    self._refresh_orders()
+                else:
+                    messagebox.showerror("Error", "Failed to cancel order")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error cancelling order: {str(e)}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _refresh_notifications(self):
+        """Refresh the notifications display."""
+        try:
+            if (
+                not hasattr(self, "order_manager")
+                or not self.order_manager.is_available
+            ):
+                return
+
+            notifications = self.order_manager.get_unread_notifications(limit=10)
+
+            # Clear existing text
+            self.notifications_text.delete(1.0, tk.END)
+
+            if not notifications:
+                self.notifications_text.insert(tk.END, "No new notifications")
+                return
+
+            # Add notifications to text widget
+            for notif in notifications:
+                created_at = notif.get("created_at")
+                time_str = created_at.strftime("%H:%M:%S") if created_at else ""
+                notification_line = (
+                    f"[{time_str}] {notif['title']}: {notif['message']}\n"
+                )
+                self.notifications_text.insert(tk.END, notification_line)
+
+            # Scroll to bottom
+            self.notifications_text.see(tk.END)
+
+        except Exception as e:
+            print(f"Error refreshing notifications: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _schedule_order_updates(self):
+        """Schedule periodic updates for orders and notifications."""
+        try:
+            self._refresh_orders()
+            self._refresh_notifications()
+
+            # Schedule next update in 5 seconds
+            self.after(5000, self._schedule_order_updates)
+
+        except Exception as e:
+            print(f"Error in scheduled order updates: {e}")
+
+    def _create_llm_research_tab(self):
+        """Create the LLM Research Engine tab for AI-powered market analysis."""
+        try:
+            # Always create the tab first
+            research_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(research_tab, text="LLM Research")
+
+            if not LLM_RESEARCH_AVAILABLE:
+                # Show a message about unavailability
+                ttk.Label(
+                    research_tab,
+                    text="LLM Research Engine Not Available\n\nRequired dependencies missing.\nPlease check imports and dependencies.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print("LLM Research Engine not available")
+                return
+
+            # Initialize the research GUI
+            config = {
+                "llm": {
+                    "api_key": "",  # Users will need to add their API key in settings
+                    "model": "gpt-4",
+                },
+                "news": {
+                    "sources": ["alpaca_news", "polygon_news"],
+                    "update_interval": 300,
+                },
+                "auto_analysis_interval": 600,
+            }
+
+            self.research_gui = ResearchEngineGUI(research_tab, config)
+
+            print("LLM Research Engine tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in research_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    research_tab,
+                    text=f"LLM Research Engine Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating LLM Research tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _create_holdings_management_tab(self):
+        """Create the Holdings Management tab for long-term portfolio management."""
+        try:
+            # Always create the tab first
+            holdings_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(holdings_tab, text="Holdings Management")
+
+            if not HOLDINGS_MANAGEMENT_AVAILABLE:
+                # Show a message about unavailability
+                ttk.Label(
+                    holdings_tab,
+                    text="Holdings Management Not Available\n\nRequired dependencies missing.\nPlease install: pip install sqlite3",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print("Holdings Management not available")
+                return
+
+            # Initialize the holdings GUI
+            self.holdings_gui = HoldingsManagementGUI(holdings_tab)
+
+            print("Holdings Management tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in holdings_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    holdings_tab,
+                    text=f"Holdings Management Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating Holdings Management tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _create_portfolio_analytics_tab(self):
+        """Create the Portfolio Analytics tab for advanced portfolio analysis."""
+        try:
+            # Always create the tab first
+            analytics_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(analytics_tab, text="Portfolio Analytics")
+
+            if not PORTFOLIO_ANALYTICS_AVAILABLE:
+                # Show a message about unavailability
+                ttk.Label(
+                    analytics_tab,
+                    text="Portfolio Analytics Not Available\n\nRequired dependencies missing.\nPlease install: pip install pandas numpy matplotlib seaborn",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print("Portfolio Analytics not available")
+                return
+
+            # Initialize the analytics GUI
+            self.analytics_gui = PortfolioAnalyticsGUI(analytics_tab)
+
+            print("Portfolio Analytics tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in analytics_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    analytics_tab,
+                    text=f"Portfolio Analytics Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating Portfolio Analytics tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _create_advanced_order_tab(self):
+        """Create the Advanced Order Types tab for sophisticated order management."""
+        try:
+            # Always create the tab first
+            advanced_order_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(advanced_order_tab, text="Advanced Orders")
+
+            if not ADVANCED_ORDER_AVAILABLE:
+                # Show a message about unavailability
+                ttk.Label(
+                    advanced_order_tab,
+                    text="Advanced Order Types Not Available\n\nRequired dependencies missing.\nPlease install advanced order automation module.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print("Advanced Order Types not available")
+                return
+
+            # Initialize the advanced order GUI
+            self.advanced_order_gui = AdvancedOrderGUI(advanced_order_tab)
+
+            print("Advanced Order Types tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in advanced_order_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    advanced_order_tab,
+                    text=f"Advanced Orders Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating Advanced Order Types tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _create_market_data_tab(self):
+        """Create the Real-time Market Data tab for live market monitoring."""
+        try:
+            # Always create the tab first
+            market_data_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(market_data_tab, text="Market Data")
+
+            if not MARKET_DATA_GUI_AVAILABLE:
+                # Show a message about unavailability
+                ttk.Label(
+                    market_data_tab,
+                    text="Real-time Market Data Not Available\n\nRequired dependencies missing.\nPlease install real-time market data module.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print("Real-time Market Data not available")
+                return
+
+            # Initialize the market data GUI
+            self.market_data_gui = MarketDataGUI(market_data_tab)
+
+            print("Real-time Market Data tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in market_data_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    market_data_tab,
+                    text=f"Market Data Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating Real-time Market Data tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _create_portfolio_optimization_tab(self):
+        """Create the Portfolio Optimization tab for advanced portfolio management."""
+        try:
+            # Always create the tab first
+            portfolio_opt_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(portfolio_opt_tab, text="Portfolio Optimization")
+
+            if not PORTFOLIO_OPTIMIZER_AVAILABLE:
+                # Show a message about unavailability
+                ttk.Label(
+                    portfolio_opt_tab,
+                    text="Portfolio Optimization Engine\n\nFor enhanced optimization features, install optional dependencies:\n\npython app/install_optional_deps.py\n\nCore features available without optional packages.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                    justify="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print(
+                    "Portfolio Optimization Engine available with limited functionality"
+                )
+                return
+
+            # Initialize the portfolio optimization GUI
+            self.portfolio_optimizer_gui = PortfolioOptimizerGUI(portfolio_opt_tab)
+
+            print("Portfolio Optimization tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in portfolio_opt_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    portfolio_opt_tab,
+                    text=f"Portfolio Optimization Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating Portfolio Optimization tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _create_backtesting_tab(self):
+        """Create the Backtesting Framework tab for strategy testing and optimization."""
+        try:
+            # Create tab
+            backtest_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(backtest_tab, text="Backtesting Framework")
+
+            if not BACKTESTING_FRAMEWORK_AVAILABLE:
+                # Show dependency message
+                ttk.Label(
+                    backtest_tab,
+                    text="Backtesting Framework\n\nFor enhanced backtesting features, install optional dependencies:\n\npython app/install_optional_deps.py\n\nCore features available without optional packages.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print("Backtesting Framework available with limited functionality")
+                return
+
+            # Initialize the backtesting GUI
+            self.backtesting_gui = BacktestingGUI(backtest_tab)
+
+            print("Backtesting Framework tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in backtest_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    backtest_tab,
+                    text=f"Backtesting Framework Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating Backtesting Framework tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _create_performance_attribution_tab(self):
+        """Create the Performance Attribution tab for portfolio analysis."""
+        try:
+            # Create tab
+            attribution_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(attribution_tab, text="Performance Attribution")
+
+            if not PERFORMANCE_ATTRIBUTION_AVAILABLE:
+                # Show dependency message
+                ttk.Label(
+                    attribution_tab,
+                    text="Performance Attribution Engine\n\nFor enhanced attribution analysis features, install optional dependencies:\n\npython app/install_optional_deps.py\n\nCore features available without optional packages.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print(
+                    "Performance Attribution Engine available with limited functionality"
+                )
+                return
+
+            # Initialize the performance attribution GUI
+            self.performance_attribution_gui = PerformanceAttributionGUI(
+                attribution_tab
+            )
+
+            print("Performance Attribution tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in attribution_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    attribution_tab,
+                    text=f"Performance Attribution Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating Performance Attribution tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _create_institutional_trading_tab(self):
+        """Create the Institutional Trading tab for enterprise-grade trading."""
+        try:
+            # Create tab
+            institutional_tab = ttk.Frame(self.bottom_notebook)
+            self.bottom_notebook.add(institutional_tab, text="🏦 Institutional Trading")
+
+            if not INSTITUTIONAL_TRADING_AVAILABLE:
+                # Show dependency message
+                ttk.Label(
+                    institutional_tab,
+                    text="🏦 Institutional Trading System\n\nEnterprise-grade trading infrastructure with:\n• High-volume order processing\n• Advanced algorithmic execution (TWAP, VWAP, Iceberg)\n• Institutional risk management\n• Batch order processing\n• Performance monitoring\n• Compliance reporting\n\nSystem is initializing...",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+                print("Institutional Trading System loading...")
+                return
+
+            # Initialize the institutional trading GUI
+            self.institutional_trading_gui = InstitutionalTradingGUI(institutional_tab)
+
+            print("Institutional Trading tab created successfully")
+
+        except Exception as e:
+            # If there's an error after tab creation, show error message in the tab
+            try:
+                for widget in institutional_tab.winfo_children():
+                    widget.destroy()
+                ttk.Label(
+                    institutional_tab,
+                    text=f"Institutional Trading Error\n\n{str(e)}\n\nPlease check console for details.",
+                    font=("TkDefaultFont", 10),
+                    anchor="center",
+                ).pack(expand=True, fill="both", padx=20, pady=20)
+            except:
+                pass
+            print(f"Error creating Institutional Trading tab: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _run_startup_dependency_check(self):
+        """Run dependency check at startup and show results."""
+        try:
+            if not DEPENDENCY_CHECKER_AVAILABLE:
+                print("Dependency checker not available - skipping check")
+                return
+
+            # Run quick check for immediate feedback
+            quick_results = quick_check()
+            missing_critical = [
+                name for name, available in quick_results.items() if not available
+            ]
+
+            if missing_critical:
+                print(
+                    f"\n⚠️  WARNING: Missing critical dependencies: {', '.join(missing_critical)}"
+                )
+                print("PowerTrader functionality will be limited.")
+                print("Run full dependency check from Help menu for details.\n")
+            else:
+                print("✅ All critical dependencies available")
+
+            # Store checker for later use
+            self.dependency_checker = get_dependency_checker()
+
+        except Exception as e:
+            print(f"Error during dependency check: {e}")
+
+    def show_dependency_status(self):
+        """Show comprehensive dependency status window."""
+        try:
+            if not DEPENDENCY_CHECKER_AVAILABLE:
+                messagebox.showinfo(
+                    "Dependency Check", "Dependency checker not available"
+                )
+                return
+
+            # Run full check
+            results = self.dependency_checker.check_all_dependencies()
+
+            # Create status window
+            status_window = tk.Toplevel(self)
+            status_window.title("PowerTrader - Dependency Status")
+            status_window.geometry("800x600")
+            status_window.configure(bg=DARK_BG)
+
+            # Create notebook for different views
+            notebook = ttk.Notebook(status_window)
+            notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+            # Overview tab
+            self._create_dependency_overview_tab(notebook, results)
+
+            # Detailed tab
+            self._create_dependency_details_tab(notebook, results)
+
+            # Install instructions tab
+            self._create_install_instructions_tab(notebook)
+
+            # Make window modal and center it
+            status_window.transient(self)
+            status_window.grab_set()
+
+            # Center the window
+            status_window.geometry(f"+{self.winfo_x() + 50}+{self.winfo_y() + 50}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to show dependency status: {str(e)}")
+
+    def _create_dependency_overview_tab(self, notebook, results):
+        """Create overview tab for dependency status."""
+        overview_frame = ttk.Frame(notebook)
+        notebook.add(overview_frame, text="Overview")
+
+        # Summary statistics
+        available_count = sum(1 for dep in results.values() if dep.available)
+        total_count = len(results)
+        required_missing = [
+            dep for dep in results.values() if dep.required and not dep.available
+        ]
+
+        # Header
+        header_frame = ttk.Frame(overview_frame)
+        header_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        ttk.Label(
+            header_frame,
+            text="PowerTrader Dependency Status",
+            font=("TkDefaultFont", 14, "bold"),
+        ).pack()
+
+        ttk.Label(
+            header_frame,
+            text=f"Dependencies: {available_count}/{total_count} available",
+            font=("TkDefaultFont", 10),
+        ).pack()
+
+        # Status indicators
+        status_frame = ttk.LabelFrame(overview_frame, text="Feature Status")
+        status_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # Create scrolled text for status
+        status_text = tk.Text(
+            status_frame, height=15, bg=DARK_PANEL, fg=DARK_FG, font=("Consolas", 10)
+        )
+        status_scrollbar = ttk.Scrollbar(
+            status_frame, orient=tk.VERTICAL, command=status_text.yview
+        )
+        status_text.configure(yscrollcommand=status_scrollbar.set)
+
+        status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        status_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Generate status text
+        status_content = f"PowerTrader Feature Status Report\\n"
+        status_content += "=" * 50 + "\\n\\n"
+
+        # Get functionality status
+        functionality_status = self.dependency_checker._get_functionality_status()
+        for feature, status in functionality_status.items():
+            status_content += f"{status['icon']} {feature}: {status['status']}\\n"
+
+        status_content += "\\n" + "=" * 50 + "\\n"
+        status_content += "Dependency Summary:\\n"
+        status_content += f"Available: {available_count}\\n"
+        status_content += f"Missing: {total_count - available_count}\\n"
+
+        if required_missing:
+            status_content += f"\\n⚠️ CRITICAL: {len(required_missing)} required dependencies missing!\\n"
+            for dep in required_missing:
+                status_content += f"  - {dep.name}\\n"
+        else:
+            status_content += "\\n✅ All required dependencies available\\n"
+
+        status_text.insert(tk.END, status_content)
+        status_text.config(state=tk.DISABLED)
+
+    def _create_dependency_details_tab(self, notebook, results):
+        """Create detailed tab for dependency status."""
+        details_frame = ttk.Frame(notebook)
+        notebook.add(details_frame, text="Details")
+
+        # Create tree view for dependencies
+        tree_frame = ttk.Frame(details_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        columns = ("Name", "Status", "Version", "Type", "Description")
+        tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=20)
+
+        # Configure columns
+        tree.heading("Name", text="Dependency")
+        tree.heading("Status", text="Status")
+        tree.heading("Version", text="Version")
+        tree.heading("Type", text="Type")
+        tree.heading("Description", text="Description")
+
+        tree.column("Name", width=120, anchor=tk.W)
+        tree.column("Status", width=80, anchor=tk.CENTER)
+        tree.column("Version", width=100, anchor=tk.W)
+        tree.column("Type", width=80, anchor=tk.CENTER)
+        tree.column("Description", width=300, anchor=tk.W)
+
+        # Add scrollbar
+        tree_scrollbar = ttk.Scrollbar(
+            tree_frame, orient=tk.VERTICAL, command=tree.yview
+        )
+        tree.configure(yscrollcommand=tree_scrollbar.set)
+
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tree_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Populate tree
+        for dep in sorted(
+            results.values(), key=lambda x: (not x.available, x.required, x.name)
+        ):
+            status = "✅ Available" if dep.available else "❌ Missing"
+            dep_type = "Required" if dep.required else "Optional"
+            version = dep.version or "N/A"
+
+            tree.insert(
+                "",
+                tk.END,
+                values=(
+                    dep.name,
+                    status,
+                    version,
+                    dep_type,
+                    dep.description[:50] + "..."
+                    if len(dep.description) > 50
+                    else dep.description,
+                ),
+            )
+
+    def _create_install_instructions_tab(self, notebook):
+        """Create install instructions tab."""
+        install_frame = ttk.Frame(notebook)
+        notebook.add(install_frame, text="Install Instructions")
+
+        # Instructions header
+        header_frame = ttk.Frame(install_frame)
+        header_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        ttk.Label(
+            header_frame,
+            text="Installation Instructions",
+            font=("TkDefaultFont", 12, "bold"),
+        ).pack()
+
+        # Install script text area
+        script_frame = ttk.LabelFrame(install_frame, text="Copy and run this script:")
+        script_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        script_text = tk.Text(
+            script_frame,
+            height=15,
+            bg=DARK_PANEL,
+            fg=DARK_FG,
+            font=("Consolas", 9),
+            wrap=tk.WORD,
+        )
+        script_scrollbar = ttk.Scrollbar(
+            script_frame, orient=tk.VERTICAL, command=script_text.yview
+        )
+        script_text.configure(yscrollcommand=script_scrollbar.set)
+
+        script_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        script_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Generate install script
+        install_script = self.dependency_checker.generate_install_script()
+        script_text.insert(tk.END, install_script)
+        script_text.config(state=tk.DISABLED)
+
+        # Copy button
+        button_frame = ttk.Frame(install_frame)
+        button_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        def copy_script():
+            self.clipboard_clear()
+            self.clipboard_append(install_script)
+            messagebox.showinfo("Copied", "Install script copied to clipboard!")
+
+        ttk.Button(
+            button_frame, text="Copy Script to Clipboard", command=copy_script
+        ).pack(side=tk.LEFT)
+
+        def save_script():
+            from tkinter import filedialog
+
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".bat",
+                filetypes=[
+                    ("Batch files", "*.bat"),
+                    ("Shell scripts", "*.sh"),
+                    ("Text files", "*.txt"),
+                ],
+                title="Save Install Script",
+            )
+            if filename:
+                try:
+                    with open(filename, "w", encoding="utf-8") as f:
+                        if filename.endswith(".bat"):
+                            f.write("@echo off\\n")
+                            f.write("echo Installing PowerTrader dependencies...\\n")
+                        f.write(install_script)
+                    messagebox.showinfo("Saved", f"Install script saved to: {filename}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to save script: {str(e)}")
+
+        ttk.Button(button_frame, text="Save Script to File", command=save_script).pack(
+            side=tk.LEFT, padx=(10, 0)
+        )
+
+    def show_about(self):
+        """Show about dialog."""
+        about_text = f"""PowerTrader AI Hub
+
+An advanced cryptocurrency trading platform with AI-powered features.
+
+Features:
+• Multi-exchange support (66+ exchanges)
+• Advanced order management with stop-loss and take-profit
+• Dollar-cost averaging (DCA) automation
+• LLM-powered market research and analysis
+• Real-time portfolio tracking
+• Dark mode interface
+
+Version: 2026.02.23
+Python: {sys.version.split()[0]}
+Platform: {sys.platform}
+
+© 2026 PowerTrader Development Team"""
+
+        messagebox.showinfo("About PowerTrader", about_text)
 
     def start_neural(self) -> None:
         # Reset runner-ready gate file (prevents stale "ready" from a prior run)
@@ -5046,13 +6643,10 @@ class PowerTraderHub(tk.Tk):
 
         # Exchange setup button
         def open_exchange_setup():
-            import subprocess
-            import sys
-
             try:
-                subprocess.Popen(
-                    [sys.executable, "exchange_setup.py"], cwd=os.path.dirname(__file__)
-                )
+                from exchange_config_gui import ExchangeConfigGUI
+
+                exchange_gui = ExchangeConfigGUI(parent=self)
                 messagebox.showinfo(
                     "Exchange Setup",
                     "Exchange configuration tool opened in separate window.",
@@ -5285,6 +6879,37 @@ class PowerTraderHub(tk.Tk):
             # Load any existing credentials so users can update without re-generating keys.
             existing_api_key, existing_private_b64 = _read_api_files()
             private_b64_state = {"value": (existing_private_b64 or "").strip()}
+
+            def _backup_existing_credentials() -> None:
+                """Create timestamped backups of existing credentials before changes."""
+                try:
+                    from datetime import datetime
+
+                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    if os.path.isfile(key_path):
+                        backup_key = f"{key_path}.bak_{ts}"
+                        shutil.copy2(key_path, backup_key)
+                    if os.path.isfile(secret_path):
+                        backup_secret = f"{secret_path}.bak_{ts}"
+                        shutil.copy2(secret_path, backup_secret)
+                except Exception:
+                    pass
+
+            def _validate_api_key(api_key: str) -> Tuple[bool, str]:
+                """Enhanced API key validation with user-friendly feedback."""
+                if not api_key:
+                    return False, "API key is required"
+                if len(api_key) < 10:
+                    return (
+                        False,
+                        "API key looks unusually short. Please verify you copied the complete key from Robinhood.",
+                    )
+                if not api_key.startswith("rh."):
+                    return (
+                        False,
+                        "Robinhood API keys typically start with 'rh.' - please verify this is the correct key.",
+                    )
+                return True, "API key format looks correct"
 
             # -----------------------------
             # Helpers (open folder, copy, etc.)
@@ -5526,6 +7151,30 @@ class PowerTraderHub(tk.Tk):
                     )
                     return
 
+                # Enhanced API key validation with user-friendly feedback
+                if len(api_key) < 10:
+                    if not messagebox.askyesno(
+                        "API key validation",
+                        "That API key looks unusually short. Robinhood API keys are typically longer.\n\n"
+                        "Are you sure you pasted the complete API Key from Robinhood?",
+                        icon="warning",
+                    ):
+                        return
+
+                # Create backup of existing credentials before saving new ones
+                try:
+                    from datetime import datetime
+
+                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    if os.path.isfile(key_path):
+                        backup_key = f"{key_path}.bak_{ts}"
+                        shutil.copy2(key_path, backup_key)
+                    if os.path.isfile(secret_path):
+                        backup_secret = f"{secret_path}.bak_{ts}"
+                        shutil.copy2(secret_path, backup_secret)
+                except Exception:
+                    pass  # Non-critical backup failure
+
                 # Safe test: market-data endpoint (no trading)
                 base_url = "https://trading.robinhood.com"
                 path = "/api/v1/crypto/marketdata/best_bid_ask/?symbol=BTC-USD"
@@ -5699,10 +7348,9 @@ class PowerTraderHub(tk.Tk):
                     pass
 
                 try:
-                    with open(key_path, "w", encoding="utf-8") as f:
-                        f.write(api_key)
-                    with open(secret_path, "w", encoding="utf-8") as f:
-                        f.write(priv_b64)
+                    # Use atomic writes to prevent corruption during concurrent access
+                    _atomic_write_text(key_path, api_key)
+                    _atomic_write_text(secret_path, priv_b64)
                 except Exception as e:
                     messagebox.showerror(
                         "Save failed",
@@ -5764,6 +7412,55 @@ class PowerTraderHub(tk.Tk):
         add_row(r, "Chart refresh seconds:", chart_refresh_var)
         r += 1
         add_row(r, "Candles limit:", candles_limit_var)
+        r += 1
+
+        # --- Public API Server Section ---
+        ttk.Separator(frm, orient="horizontal").grid(
+            row=r, column=0, columnspan=3, sticky="ew", pady=10
+        )
+        r += 1
+
+        api_enabled_var = tk.BooleanVar(
+            value=bool(self.settings.get("api_server_enabled", False))
+        )
+        api_host_var = tk.StringVar(
+            value=self.settings.get("api_server_host", "127.0.0.1")
+        )
+        api_port_var = tk.StringVar(
+            value=str(self.settings.get("api_server_port", 8080))
+        )
+
+        chk_api = ttk.Checkbutton(
+            frm, text="Enable Public API Server", variable=api_enabled_var
+        )
+        chk_api.grid(row=r, column=0, columnspan=3, sticky="w", pady=(0, 5))
+        r += 1
+
+        add_row(r, "API Host:", api_host_var)
+        r += 1
+        add_row(r, "API Port:", api_port_var)
+        r += 1
+
+        # API Status and test button
+        api_status_frame = ttk.Frame(frm)
+        api_status_frame.grid(row=r, column=0, columnspan=3, sticky="ew", pady=(5, 10))
+        api_status_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(api_status_frame, text="Status:").grid(row=0, column=0, sticky="w")
+        api_status_lbl = ttk.Label(api_status_frame, text="Unknown")
+        api_status_lbl.grid(row=0, column=1, sticky="w", padx=(10, 0))
+
+        def test_api():
+            if API_SERVER_AVAILABLE:
+                status = self.get_api_server_status()
+                api_status_lbl.config(text=status.get("message", "Unknown"))
+            else:
+                api_status_lbl.config(text="Flask not installed")
+
+        ttk.Button(api_status_frame, text="Test API", command=test_api).grid(
+            row=0, column=2, sticky="e"
+        )
+        test_api()  # Initial status check
         r += 1
 
         chk = ttk.Checkbutton(
@@ -5914,7 +7611,31 @@ class PowerTraderHub(tk.Tk):
                     float(candles_limit_var.get().strip())
                 )
                 self.settings["auto_start_scripts"] = bool(auto_start_var.get())
+
+                # --- API Server Settings ---
+                self.settings["api_server_enabled"] = api_enabled_var.get()
+                self.settings["api_server_host"] = api_host_var.get()
+                try:
+                    port = int(api_port_var.get())
+                    self.settings["api_server_port"] = max(1, min(port, 65535))
+                except ValueError:
+                    self.settings["api_server_port"] = 8080
+
+                # --- Dark Theme and Notifications ---
+                self.settings["dark_theme"] = dark_theme_var.get()
+                self.settings["training_notifications"] = notifications_var.get()
+
                 self._save_settings()
+
+                # Apply theme changes
+                self._apply_theme()
+
+                # Restart API server if settings changed
+                if API_SERVER_AVAILABLE:
+                    if api_enabled_var.get():
+                        self.start_api_server()
+                    else:
+                        self.stop_api_server()
 
                 # If new coin(s) were added and their training folder doesn't exist yet,
                 # create the folder and copy neural_trainer.py into it RIGHT AFTER saving settings.
@@ -6000,6 +7721,62 @@ class PowerTraderHub(tk.Tk):
                 "details": f"Failed to initialize: {str(e)}",
             }
             print(f"Exchange system initialization error: {e}")
+
+    def _init_api_server(self):
+        """Initialize the public API server"""
+        if not API_SERVER_AVAILABLE:
+            print("API Server not available - install flask and flask-cors")
+            return
+
+        try:
+            self._api_server = create_api_server(
+                hub_data_dir=self.hub_dir,
+                port=self._api_server_port,
+                host=self._api_server_host,
+            )
+
+            if self._api_server_enabled:
+                self._api_server.start_server()
+                print(
+                    f"Public API server started at http://{self._api_server_host}:{self._api_server_port}"
+                )
+
+        except Exception as e:
+            print(f"Failed to initialize API server: {e}")
+            self._api_server = None
+
+    def toggle_api_server(self, enabled: bool):
+        """Toggle API server on/off"""
+        if not API_SERVER_AVAILABLE:
+            return False
+
+        if enabled and not self._api_server:
+            self._init_api_server()
+            return self._api_server is not None
+        elif enabled and self._api_server and not self._api_server.is_running():
+            self._api_server.start_server()
+            return True
+        elif not enabled and self._api_server and self._api_server.is_running():
+            self._api_server.stop_server()
+            return True
+        return False
+
+    def get_api_server_status(self) -> dict:
+        """Get current API server status"""
+        if not API_SERVER_AVAILABLE:
+            return {"status": "unavailable", "message": "Flask not installed"}
+
+        if not self._api_server:
+            return {"status": "disabled", "message": "API server not initialized"}
+
+        if self._api_server.is_running():
+            return {
+                "status": "running",
+                "url": f"http://{self._api_server_host}:{self._api_server_port}",
+                "message": "API server is operational",
+            }
+        else:
+            return {"status": "stopped", "message": "API server is stopped"}
 
     def _check_exchange_status_worker(self):
         """Background worker to check exchange connectivity"""
@@ -6102,6 +7879,11 @@ class PowerTraderHub(tk.Tk):
         self.destroy()
 
 
-if __name__ == "__main__":
+def main():
+    """Entry point for console script installation."""
     app = PowerTraderHub()
     app.mainloop()
+
+
+if __name__ == "__main__":
+    main()

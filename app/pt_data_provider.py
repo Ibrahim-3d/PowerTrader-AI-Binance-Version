@@ -88,7 +88,7 @@ class DataProvider:
 
         # No providers available
         if os.environ.get("POWERTRADER_ENV") == "test":
-            print("ℹ No data providers available in test environment")
+            print("INFO: No data providers available in test environment")
         else:
             print("ERROR: All data providers failed")
         self.initialized = False
