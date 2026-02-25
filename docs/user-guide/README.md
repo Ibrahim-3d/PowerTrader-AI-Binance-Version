@@ -278,7 +278,7 @@ Monitor application health:
 
 ## Next Steps
 
-- [Exchange Setup](../exchanges/README.md): Configure KuCoin and Robinhood
+- [Exchange Setup](../exchanges/README.md): Configure your preferred exchange from 65+ supported providers
 - [API Configuration](../api-configuration/README.md): Set up API keys
 - [Security Guide](../security/README.md): Secure your trading setup
 - [Troubleshooting](../troubleshooting/README.md): Solve common issues

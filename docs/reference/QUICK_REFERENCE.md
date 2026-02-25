@@ -2,7 +2,7 @@
 
 ## New Multi-Exchange Features Overview
 
-PowerTraderAI+ now supports **global cryptocurrency trading** across 10+ major exchanges with unified management and intelligent routing.
+PowerTraderAI+ now supports **global cryptocurrency trading** across 65+ major exchanges with unified management and intelligent routing.
 
 ## 📖 Documentation Library
 

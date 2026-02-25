@@ -24,6 +24,14 @@ PowerTrader AI+ is a comprehensive, institutional-quality trading platform that 
 - Performance attribution analysis (Brinson attribution)
 - Real-time market data integration and visualization
 
+### Quick Navigation
+- **[Getting Started](docs/getting-started/README.md)** - Installation and setup
+- **[User Guide](docs/user-guide/README.md)** - How to use the application
+- **[Exchange Setup](docs/exchanges/README.md)** - 65+ cryptocurrency exchange configuration
+- **[Security Guide](docs/security/README.md)** - Security best practices
+- **[API Configuration](docs/api-configuration/README.md)** - Detailed API setup
+- **[Troubleshooting](docs/troubleshooting/README.md)** - Common issues and solutions
+
 ### 💼 **Enterprise Features**
 - Order management system with advanced order types
 - LLM-powered research and market analysis
@@ -33,7 +41,6 @@ PowerTrader AI+ is a comprehensive, institutional-quality trading platform that 
 ## 🚀 Quick Start
 
 ### Installation
-
 ```bash
 # Clone the repository
 git clone <repository-url>
