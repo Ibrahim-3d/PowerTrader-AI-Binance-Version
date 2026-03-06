@@ -166,6 +166,11 @@ hub_data/
 trading_data/
 backups/
 
+# Log files
+*.log
+app_stdout*.log
+app_stderr*.log
+
 # Database files (SQLite, etc.)
 *.db
 *.db-shm
