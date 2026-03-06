@@ -5,9 +5,10 @@ Welcome to the complete documentation for PowerTrader AI+, an enterprise-grade A
 ## 📚 Documentation Structure
 
 ### 🚀 **Getting Started**
-- **[Installation Guide](getting-started/installation.md)** - Step-by-step installation instructions
-- **[Setup & Configuration](setup/CREDENTIAL_SETUP.md)** - API keys and exchange setup
-- **[First Steps](getting-started/README.md)** - Your first trades and basic usage
+- **[📦 Complete Installation Guide](INSTALLATION.md)** - Comprehensive installation with troubleshooting
+- **[⚡ Quick Setup Guide](getting-started/README.md)** - Fast setup for experienced users  
+- **[🔐 Setup & Configuration](setup/CREDENTIAL_SETUP.md)** - API keys and exchange setup
+- **[🎯 First Steps Tutorial](getting-started/first-steps.md)** - Your first trades and basic usage
 
 ### 👤 **User Guides**
 - **[Desktop Application](user-guide/DESKTOP_INSTALLATION_GUIDE.md)** - Desktop interface setup

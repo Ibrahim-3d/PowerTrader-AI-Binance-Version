@@ -166,6 +166,29 @@ hub_data/
 trading_data/
 backups/
 
+# Database files (SQLite, etc.)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Machine Learning Models
+*.pth
+*.pkl
+*.pickle
+*.model
+*.h5
+
+# Training results and generated configs
+*_training_results.json
+futures_*_onoff.txt
+*_profit_margin.txt
+*_dca_signal.txt
+neural_*.txt
+memory_*.txt
+*.html
+
 # IDE specific
 .vscode/
 .idea/

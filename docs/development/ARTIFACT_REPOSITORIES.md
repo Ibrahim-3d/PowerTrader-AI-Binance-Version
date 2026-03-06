@@ -206,18 +206,9 @@ aws codeartifact list-repositories --domain your-domain
          -o powertrader-ai.zip \
          "$ARTIFACTORY_URL/powertrader-releases/PowerTrader_AI_Desktop_latest.zip"
 ```
-
-### Docker Integration
-```dockerfile
-# Install from PyPI in containers
-FROM python:3.11
-RUN pip install powertrader-ai
-CMD ["powertrader"]
-```
-
 ---
 
-**Configuration Team:**
-*Simon Jackson (@sjackson0109) - PowerTraderAI+ Development Team*
+**CICD Configuration Team:**
+*Simon Jackson (@sjackson0109)*
 
 **Last Updated:** February 20, 2026

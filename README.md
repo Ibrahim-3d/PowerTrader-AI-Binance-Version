@@ -1,44 +1,59 @@
 # PowerTrader AI+
 
-🚀 **Enterprise-Grade AI Trading Platform**
+**Enterprise-Grade AI Trading Platform**
 
 PowerTrader AI+ is a comprehensive, institutional-quality trading platform that combines advanced machine learning algorithms with professional-grade trading infrastructure. Built for both individual traders and enterprise deployment.
 
-## 🎯 Key Features
+## Key Features
 
-### 🤖 **AI-Powered Trading**
+### **AI-Powered Trading**
 - Advanced neural network trading algorithms
 - Real-time market analysis and prediction
 - Automated strategy optimization
 - Multi-exchange support with unified interface
 
-### 🏦 **Institutional Trading**
+### **Institutional Trading**
 - High-volume order processing and batch execution
 - Algorithmic trading (TWAP, VWAP, Iceberg orders)
 - Advanced risk management and compliance monitoring
 - Professional audit trails and regulatory reporting
 
-### 📊 **Advanced Analytics**
+### **Advanced Analytics**
 - Portfolio optimization using Modern Portfolio Theory
 - Comprehensive backtesting framework with Monte Carlo simulation
 - Performance attribution analysis (Brinson attribution)
 - Real-time market data integration and visualization
 
 ### Quick Navigation
-- **[Getting Started](docs/getting-started/README.md)** - Installation and setup
+- **[📦 Complete Installation Guide](docs/INSTALLATION.md)** - Comprehensive setup with troubleshooting
 - **[User Guide](docs/user-guide/README.md)** - How to use the application
 - **[Exchange Setup](docs/exchanges/README.md)** - 65+ cryptocurrency exchange configuration
 - **[Security Guide](docs/security/README.md)** - Security best practices
 - **[API Configuration](docs/api-configuration/README.md)** - Detailed API setup
 - **[Troubleshooting](docs/troubleshooting/README.md)** - Common issues and solutions
 
-### 💼 **Enterprise Features**
+### **Enterprise Features**
 - Order management system with advanced order types
 - LLM-powered research and market analysis
 - Long-term holdings management and portfolio analytics
 - Comprehensive compliance and audit system
 
-## 🚀 Quick Start
+## Quick Start
+
+### Prerequisites
+- **Python 3.11+** (Python 3.13 recommended for optimal performance)
+- **Git** for repository cloning
+- **Virtual environment support** (venv, conda, etc.)
+- **Windows 10/11, macOS, or Linux** (Windows tested)
+- **8GB RAM minimum** (16GB recommended for large portfolios)
+- **Internet connection** for market data and package installation
+
+### System Requirements
+- **CPU**: Multi-core processor (Intel i5/AMD Ryzen 5 or better)
+- **Memory**: 8GB RAM minimum, 16GB recommended
+- **Storage**: 2GB free disk space for application and data
+- **Network**: Stable broadband internet connection
+- **Display**: 1920x1080 minimum resolution recommended
 
 ### Installation
 ```bash
@@ -46,11 +61,48 @@ PowerTrader AI+ is a comprehensive, institutional-quality trading platform that 
 git clone <repository-url>
 cd PowerTrader_AI
 
-# Install dependencies
-pip install -r requirements.txt
+# Create and activate virtual environment (STRONGLY recommended)
+python -m venv .venv
 
-# Run PowerTrader Hub
-python app/pt_hub.py
+# Activate virtual environment
+.venv\Scripts\activate        # Windows
+source .venv/bin/activate     # Linux/Mac
+
+# Install all dependencies (automatic, warning-free)
+python install_dependencies.py
+
+# Alternative: Manual installation
+pip install -r requirements.txt --no-warn-script-location --upgrade
+
+# Verify installation
+python -c "import flask, openai, ccxt; print('All dependencies installed successfully!')"
+
+# Launch PowerTrader AI+
+cd app
+python pt_hub.py
+```
+
+### Quick Installation (One-Command Setup)
+```bash
+# For experienced users - complete setup in one command
+git clone <repository-url> && cd PowerTrader_AI && python -m venv .venv && .venv\Scripts\activate && python install_dependencies.py && cd app && python pt_hub.py
+```
+
+### Troubleshooting Installation
+If you encounter issues:
+```bash
+# Check Python version (must be 3.11+)
+python --version
+
+# Verify virtual environment
+python -c "import sys; print('Virtual env active:' if hasattr(sys, 'real_prefix') or sys.base_prefix != sys.prefix else 'No virtual env')"
+
+# Clean reinstall
+rm -rf .venv  # Linux/Mac
+rmdir /s .venv  # Windows
+python -m venv .venv
+.venv\Scripts\activate
+python install_dependencies.py
 ```
 
 ### Desktop Application

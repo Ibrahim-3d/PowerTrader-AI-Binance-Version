@@ -225,9 +225,9 @@ class MultiExchangeManager:
                 # Add exchange to manager
                 if self.exchange_manager.add_exchange(exchange_type, **credentials):
                     success_count += 1
-                    print(f"✓ Connected to {exchange_config.exchange_type}")
+                    print(f"[SUCCESS] Connected to {exchange_config.exchange_type}")
                 else:
-                    print(f"✗ Failed to connect to {exchange_config.exchange_type}")
+                    print(f"[ERROR] Failed to connect to {exchange_config.exchange_type}")
 
             except Exception as e:
                 print(f"Error connecting to {exchange_config.exchange_type}: {e}")

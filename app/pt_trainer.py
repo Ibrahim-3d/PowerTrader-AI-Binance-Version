@@ -75,12 +75,17 @@ def train_neural_network(coin: str) -> bool:
             "status": "completed",
         }
 
-        results_file = f"{coin.lower()}_training_results.json"
+        # Ensure data directory exists
+        data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+        os.makedirs(data_dir, exist_ok=True)
+        
+        results_file = os.path.join(data_dir, f"{coin.lower()}_training_results.json")
         with open(results_file, "w") as f:
             json.dump(training_results, f, indent=2)
 
         print(f"Training completed successfully for {coin}")
         print(f"Results saved to: {results_file}")
+        print(f"DEBUG: About to return True from train_neural_network")
         return True
 
     except Exception as e:
@@ -88,6 +93,7 @@ def train_neural_network(coin: str) -> bool:
         import traceback
 
         traceback.print_exc()
+        print(f"DEBUG: About to return False from train_neural_network")
         return False
 
 
@@ -110,10 +116,16 @@ def main():
     success = train_neural_network(coin)
 
     if success:
-        print(f"\n✅ Training completed successfully for {coin}")
+        print(f"\n[SUCCESS] Training completed successfully for {coin}")
+        print(f"DEBUG: About to exit with code 0")
+        sys.stdout.flush()  # Ensure all output is flushed
+        time.sleep(1)  # Give time for output to be captured
         sys.exit(0)
     else:
-        print(f"\n❌ Training failed for {coin}")
+        print(f"\n[FAILED] Training failed for {coin}")
+        print(f"DEBUG: About to exit with code 1")
+        sys.stdout.flush()  # Ensure all output is flushed
+        time.sleep(1)  # Give time for output to be captured
         sys.exit(1)
 
 

@@ -292,7 +292,31 @@ _GUI_SETTINGS_PATH = os.environ.get("POWERTRADER_GUI_SETTINGS") or os.path.join(
 _gui_settings_cache = {
     "mtime": None,
     "coins": ["BTC", "ETH", "XRP", "BNB", "DOGE"],  # fallback defaults
+    "data": {},  # cache the full settings data
 }
+
+
+def _load_gui_settings() -> dict:
+    """
+    Reads gui_settings.json and returns the full settings dictionary.
+    Caches by mtime so it is cheap to call frequently.
+    """
+    try:
+        if not os.path.isfile(_GUI_SETTINGS_PATH):
+            return _gui_settings_cache.get("data", {})
+
+        mtime = os.path.getmtime(_GUI_SETTINGS_PATH)
+        if _gui_settings_cache["mtime"] == mtime and _gui_settings_cache.get("data"):
+            return dict(_gui_settings_cache["data"])
+
+        with open(_GUI_SETTINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+
+        _gui_settings_cache["mtime"] = mtime
+        _gui_settings_cache["data"] = data
+        return dict(data)
+    except Exception:
+        return _gui_settings_cache.get("data", {})
 
 
 def _load_gui_coins() -> List[str]:
@@ -301,16 +325,7 @@ def _load_gui_coins() -> List[str]:
     Caches by mtime so it is cheap to call frequently.
     """
     try:
-        if not os.path.isfile(_GUI_SETTINGS_PATH):
-            return list(_gui_settings_cache["coins"])
-
-        mtime = os.path.getmtime(_GUI_SETTINGS_PATH)
-        if _gui_settings_cache["mtime"] == mtime:
-            return list(_gui_settings_cache["coins"])
-
-        with open(_GUI_SETTINGS_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f) or {}
-
+        data = _load_gui_settings()
         coins = data.get("coins", None)
         if not isinstance(coins, list) or not coins:
             coins = list(_gui_settings_cache["coins"])
@@ -318,12 +333,58 @@ def _load_gui_coins() -> List[str]:
         coins = [str(c).strip().upper() for c in coins if str(c).strip()]
         if not coins:
             coins = list(_gui_settings_cache["coins"])
-
-        _gui_settings_cache["mtime"] = mtime
+        
+        # Update cache for backwards compatibility
         _gui_settings_cache["coins"] = coins
         return list(coins)
     except Exception:
         return list(_gui_settings_cache["coins"])
+
+
+def _get_futures_config() -> dict:
+    """
+    Get futures trading configuration from GUI settings.
+    Returns default values if not configured.
+    """
+    try:
+        settings = _load_gui_settings()
+        futures_config = settings.get("futures_trading", {})
+        
+        # Provide sensible defaults if not configured
+        defaults = {
+            "long_enabled": False,
+            "short_enabled": False,
+            "max_leverage": 10,
+            "risk_per_trade": 2.0,
+        }
+        
+        # Merge user settings with defaults
+        for key, default_value in defaults.items():
+            if key not in futures_config:
+                futures_config[key] = default_value
+                
+        return futures_config
+    except Exception:
+        # Fallback to safe defaults
+        return {
+            "long_enabled": False,
+            "short_enabled": False,
+            "max_leverage": 10,
+            "risk_per_trade": 2.0,
+        }
+
+
+def _get_alerts_version() -> str:
+    """
+    Get alerts version timestamp from GUI settings.
+    Returns default timestamp if not configured.
+    """
+    try:
+        settings = _load_gui_settings()
+        alerts_config = settings.get("alerts_config", {})
+        return alerts_config.get("version", "5/3/2022/9am")
+    except Exception:
+        return "5/3/2022/9am"
 
 
 # Initial coin list (will be kept live via _sync_coins_from_settings())
@@ -520,15 +581,10 @@ def init_coin(sym: str):
     # switch into the coin's folder so ALL existing relative file I/O stays working
     os.chdir(coin_folder(sym))
 
-    # per-coin "version" + on/off files (no collisions between coins)
-    with open("alerts_version.txt", "w+") as f:
-        f.write("5/3/2022/9am")
-
-    with open("futures_long_onoff.txt", "w+") as f:
-        f.write("OFF")
-
-    with open("futures_short_onoff.txt", "w+") as f:
-        f.write("OFF")
+    # NOTE: All configuration now managed via GUI settings:
+    # - futures_trading: Use _get_futures_config() for futures on/off settings
+    # - alerts_config: Use _get_alerts_version() for alerts version timestamp
+    # No more scattered config text files per coin folder.
 
     st = new_coin_state()
 
@@ -573,99 +629,6 @@ def init_coin(sym: str):
     states[sym] = st
 
 
-# Initialize only when run as main script, not during import
-def main():
-    """Main entry point for pt_thinker when run as a script."""
-    # init all coins once (from GUI settings)
-    for _sym in CURRENT_COINS:
-        init_coin(_sym)
-
-    # restore CWD to base after init
-    os.chdir(BASE_DIR)
-
-    # Main execution loop
-    try:
-        while True:
-            # Hot-reload coins from GUI settings while running
-            _sync_coins_from_settings()
-
-            for _sym in CURRENT_COINS:
-                step_coin(_sym)
-
-            # clear + re-print one combined screen (so you don't see old output above new)
-            os.system("cls" if os.name == "nt" else "clear")
-
-            for _sym in CURRENT_COINS:
-                print(display_cache.get(_sym, _sym + "  (no data yet)"))
-                print("\n" + ("-" * 60) + "\n")
-
-            # small sleep so you don't peg CPU when running many coins
-            time.sleep(0.15)
-
-    except Exception:
-        PrintException()
-
-
-if __name__ == "__main__":
-    # Only initialize when run directly, not when imported
-    main()
-
-
-wallet_addr_list = []
-wallet_addr_users = []
-total_long = 0
-total_short = 0
-last_hour = 565457457357
-
-cc_index = 0
-tf_choice = []
-prices = []
-starts = []
-long_start_prices = []
-short_start_prices = []
-buy_coins = []
-cc_update = "yes"
-wr_update = "yes"
-
-
-def find_purple_area(lines: List[float]) -> List[List[float]]:
-    """
-    Given a list of (price, color) pairs (color is 'orange' or 'blue'),
-    returns (purple_bottom, purple_top) if a purple area exists,
-    else (None, None).
-    """
-    oranges = sorted(
-        [price for price, color in lines if color == "orange"], reverse=True
-    )
-    blues = sorted([price for price, color in lines if color == "blue"])
-    if not oranges or not blues:
-        return (None, None)
-    purple_bottom = None
-    purple_top = None
-    all_levels = sorted(
-        set(oranges + blues + [float("-inf"), float("inf")]), reverse=True
-    )
-    for i in range(len(all_levels) - 1):
-        top = all_levels[i]
-        bottom = all_levels[i + 1]
-        oranges_below = [o for o in oranges if o < bottom]
-        blues_above = [b for b in blues if b > top]
-        has_orange_below = any(o < top for o in oranges)
-        has_blue_above = any(b > bottom for b in blues)
-        if has_orange_below and has_blue_above:
-            if purple_bottom is None or bottom < purple_bottom:
-                purple_bottom = bottom
-            if purple_top is None or top > purple_top:
-                purple_top = top
-    if (
-        purple_bottom is not None
-        and purple_top is not None
-        and purple_top > purple_bottom
-    ):
-        return (purple_bottom, purple_top)
-    return (None, None)
-
-
 def step_coin(sym: str):
     # run inside the coin folder so all existing file reads/writes stay relative + isolated
     os.chdir(coin_folder(sym))
@@ -687,9 +650,9 @@ def step_coin(sym: str):
                 f.write("0.25")
             with open("futures_short_profit_margin.txt", "w+") as f:
                 f.write("0.25")
-            with open("long_dca_signal.txt", "w+") as f:
+            with open("signals_dca_spread.txt", "w+") as f:
                 f.write("0")
-            with open("short_dca_signal.txt", "w+") as f:
+            with open("signals_dca_single.txt", "w+") as f:
                 f.write("0")
         except Exception:
             pass
@@ -1411,9 +1374,9 @@ def step_coin(sym: str):
             except:
                 pm = 0.25
 
-            with open("futures_long_profit_margin.txt", "w+") as f:
+            with open("futures_profit_margin_spread.txt", "w+") as f:
                 f.write(str(pm))
-            with open("long_dca_signal.txt", "w+") as f:
+            with open("signals_dca_spread.txt", "w+") as f:
                 f.write(str(longs))
 
             # short pm
@@ -1425,9 +1388,9 @@ def step_coin(sym: str):
             except:
                 pm = 0.25
 
-            with open("futures_short_profit_margin.txt", "w+") as f:
+            with open("futures_profit_margin_single.txt", "w+") as f:
                 f.write(str(abs(pm)))
-            with open("short_dca_signal.txt", "w+") as f:
+            with open("signals_dca_single.txt", "w+") as f:
                 f.write(str(shorts))
 
         except:
@@ -1497,3 +1460,96 @@ def step_coin(sym: str):
     st["training_issues"] = training_issues
 
     states[sym] = st
+
+
+# Initialize only when run as main script, not during import
+def main():
+    """Main entry point for pt_thinker when run as a script."""
+    # init all coins once (from GUI settings)
+    for _sym in CURRENT_COINS:
+        init_coin(_sym)
+
+    # restore CWD to base after init
+    os.chdir(BASE_DIR)
+
+    # Main execution loop
+    try:
+        while True:
+            # Hot-reload coins from GUI settings while running
+            _sync_coins_from_settings()
+
+            for _sym in CURRENT_COINS:
+                step_coin(_sym)
+
+            # clear + re-print one combined screen (so you don't see old output above new)
+            os.system("cls" if os.name == "nt" else "clear")
+
+            for _sym in CURRENT_COINS:
+                print(display_cache.get(_sym, _sym + "  (no data yet)"))
+                print("\n" + ("-" * 60) + "\n")
+
+            # small sleep so you don't peg CPU when running many coins
+            time.sleep(0.15)
+
+    except Exception:
+        PrintException()
+
+
+if __name__ == "__main__":
+    # Only initialize when run directly, not when imported
+    main()
+
+
+wallet_addr_list = []
+wallet_addr_users = []
+total_long = 0
+total_short = 0
+last_hour = 565457457357
+
+cc_index = 0
+tf_choice = []
+prices = []
+starts = []
+long_start_prices = []
+short_start_prices = []
+buy_coins = []
+cc_update = "yes"
+wr_update = "yes"
+
+
+def find_purple_area(lines: List[float]) -> List[List[float]]:
+    """
+    Given a list of (price, color) pairs (color is 'orange' or 'blue'),
+    returns (purple_bottom, purple_top) if a purple area exists,
+    else (None, None).
+    """
+    oranges = sorted(
+        [price for price, color in lines if color == "orange"], reverse=True
+    )
+    blues = sorted([price for price, color in lines if color == "blue"])
+    if not oranges or not blues:
+        return (None, None)
+    purple_bottom = None
+    purple_top = None
+    all_levels = sorted(
+        set(oranges + blues + [float("-inf"), float("inf")]), reverse=True
+    )
+    for i in range(len(all_levels) - 1):
+        top = all_levels[i]
+        bottom = all_levels[i + 1]
+        oranges_below = [o for o in oranges if o < bottom]
+        blues_above = [b for b in blues if b > top]
+        has_orange_below = any(o < top for o in oranges)
+        has_blue_above = any(b > bottom for b in blues)
+        if has_orange_below and has_blue_above:
+            if purple_bottom is None or bottom < purple_bottom:
+                purple_bottom = bottom
+            if purple_top is None or top > purple_top:
+                purple_top = top
+    if (
+        purple_bottom is not None
+        and purple_top is not None
+        and purple_top > purple_bottom
+    ):
+        return (purple_bottom, purple_top)
+    return (None, None)

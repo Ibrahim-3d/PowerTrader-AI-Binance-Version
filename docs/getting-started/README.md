@@ -1,37 +1,133 @@
 # Getting Started with PowerTraderAI+
 
-This guide will walk you through the initial setup and configuration of PowerTraderAI+.
+This comprehensive guide will walk you through the complete setup and configuration of PowerTraderAI+.
 
-## Prerequisites
+## System Prerequisites
 
-- Python 3.8 or higher
-- Windows 10/11 (current configuration)
-- Internet connection for market data and trading
-- KuCoin account for market data
-- Robinhood account for trading execution
+### Hardware Requirements
+- **CPU**: Multi-core processor (Intel i5/AMD Ryzen 5 or equivalent)
+- **Memory**: 8GB RAM minimum, 16GB recommended for large portfolios
+- **Storage**: 2GB free disk space for application and dependencies
+- **Display**: 1920x1080 minimum resolution for optimal GUI experience
+- **Network**: Stable broadband internet connection (required for market data)
 
-## Installation
+### Software Requirements
+- **Python 3.11+** (Python 3.13 strongly recommended)
+  - Download from: https://python.org/downloads/
+  - Ensure "Add Python to PATH" is checked during installation
+- **Git** (for repository cloning)
+  - Windows: https://git-scm.com/download/win
+  - macOS: Install via Xcode Command Line Tools or Homebrew
+  - Linux: Use package manager (e.g., `sudo apt install git`)
+- **Operating System**:
+  - Windows 10/11 (fully tested)
+  - macOS 10.15+ (compatible)
+  - Ubuntu 18.04+ or equivalent Linux distribution
 
-### Step 1: Clone the Repository
+### Account Prerequisites
+- **Exchange Accounts** (optional for live trading):
+  - Supported exchanges: 110+ via CCXT library
+  - API keys required for live trading
+  - Demo/testnet accounts recommended for initial testing
+- **OpenAI Account** (optional for LLM research features):
+  - API key required for AI-powered market analysis
+  - Pay-per-use pricing model
+
+## Installation Process
+
+### Method 1: Automated Installation (Recommended)
 
 ```bash
-git clone https://github.com/sjackson0109/PowerTraderAI.git
-cd PowerTraderAI
-```
+# Step 1: Clone the repository
+git clone <repository-url>
+cd PowerTrader_AI
 
-### Step 2: Install Dependencies
+# Step 2: Create virtual environment (CRITICAL for dependency isolation)
+python -m venv .venv
 
-```bash
-pip install -r requirements.txt
-```
+# Step 3: Activate virtual environment
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
 
-### Step 3: Verify Installation
+# Step 4: Install all dependencies automatically
+python install_dependencies.py
 
-```python
+# Step 5: Launch PowerTrader AI+
+cd app
 python pt_hub.py
 ```
 
-If the GUI launches successfully, your installation is complete.
+### Method 2: Manual Installation
+
+```bash
+# Follow steps 1-3 from Method 1, then:
+
+# Install dependencies manually
+pip install -r requirements.txt --no-warn-script-location --upgrade
+
+# Verify critical dependencies
+python -c "import flask, openai, ccxt, matplotlib, pandas; print('All critical packages installed!')"
+
+# Launch application
+cd app
+python pt_hub.py
+```
+
+### Method 3: One-Command Setup (Advanced Users)
+
+```bash
+# Complete installation in single command
+git clone <repository-url> && cd PowerTrader_AI && python -m venv .venv && .venv\Scripts\activate && python install_dependencies.py && echo "Installation complete! Run: cd app && python pt_hub.py"
+```
+
+## Installation Verification
+
+### Quick System Check
+```bash
+# Verify Python version
+python --version  # Should show 3.11 or higher
+
+# Check virtual environment
+python -c "import sys; print('✓ Virtual env active' if hasattr(sys, 'real_prefix') or sys.base_prefix != sys.prefix else '✗ No virtual env detected')"
+
+# Test core dependencies
+python -c "
+try:
+    import flask, openai, ccxt, matplotlib, pandas, numpy
+    print('✓ All core dependencies available')
+except ImportError as e:
+    print(f'✗ Missing dependency: {e}')
+"
+
+# Verify application startup
+cd app && python -c "from pt_hub import PowerTraderHub; print('✓ PowerTrader Hub can be imported')"
+```
+
+### Expected Output
+Successful installation should show:
+```
+PowerTrader AI+ Dependency Installer
+==================================================
+Virtual environment detected
+
+Installing dependencies...
+   This process is completely automated and warning-free
+All dependencies installed successfully!
+
+Verifying installation...
+  [OK] Flask web framework
+  [OK] OpenAI API client  
+  [OK] Exchange integration
+  [OK] Web scraping
+
+PowerTrader AI+ is ready to run!
+
+Next steps:
+   1. cd app
+   2. python pt_hub.py
+```
 
 ## Initial Configuration
 

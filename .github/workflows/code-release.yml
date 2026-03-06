@@ -268,10 +268,10 @@ jobs:
             return ""
 
         setup(
-            name="powertrader-ai",
+            name="PowerTraderAI+",
             version="${{ steps.version.outputs.PYTHON_VERSION }}",
             author="Simon Jackson",
-            author_email="simon@powertrader.ai",
+            author_email="simon@jacksonfamily.me",
             description="PowerTraderAI+ - Advanced Cryptocurrency Trading Bot",
             long_description=read_readme(),
             long_description_content_type="text/markdown",

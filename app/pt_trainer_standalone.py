@@ -65,7 +65,11 @@ def train_neural_network(coin: str) -> bool:
             "status": "completed",
         }
 
-        results_file = f"{coin.lower()}_training_results.json"
+        # Ensure data directory exists
+        data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+        os.makedirs(data_dir, exist_ok=True)
+        
+        results_file = os.path.join(data_dir, f"{coin.lower()}_training_results.json")
         with open(results_file, "w") as f:
             json.dump(training_results, f, indent=2)
 

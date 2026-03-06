@@ -126,6 +126,31 @@ class DataProvider:
 
         raise RuntimeError("Multi-exchange system not initialized")
 
+    def get_historical_data(self, coin: str, timeframe: str, **kwargs) -> str:
+        """
+        Get historical candlestick/kline data for a cryptocurrency.
+
+        Args:
+            coin: Cryptocurrency symbol (e.g., "BTC", "ETH")
+            timeframe: Time interval (e.g., "1hour", "1day")
+            **kwargs: Additional parameters like limit, startAt, endAt
+
+        Returns:
+            String representation of historical kline data
+
+        Raises:
+            RuntimeError: If no data providers are available
+        """
+        # Convert coin to standard trading pair format
+        # Handle different exchange symbol formats
+        symbol = self._normalize_symbol(coin)
+        
+        # Default to getting more historical data if not specified
+        if 'limit' not in kwargs:
+            kwargs['limit'] = 1000
+            
+        return self.get_kline_data(symbol, timeframe, **kwargs)
+
     def get_ticker_data(self, symbol: str) -> str:
         """
         Get current ticker data for a trading pair.
@@ -155,6 +180,28 @@ class DataProvider:
 
         raise RuntimeError("Multi-exchange system not initialized")
 
+    def _normalize_symbol(self, coin: str) -> str:
+        """
+        Normalize cryptocurrency symbol for exchange compatibility.
+        
+        Args:
+            coin: Base cryptocurrency symbol (e.g., "BTC", "ETH")
+            
+        Returns:
+            Normalized symbol format for the active exchange
+        """
+        # Convert to uppercase
+        coin = coin.upper().strip()
+        
+        # For most exchanges, USDT pairing is standard
+        # Handle special cases if needed
+        if coin.endswith('USDT'):
+            return coin
+        elif coin.endswith('-USDT'):
+            return coin.replace('-', '')
+        else:
+            return f"{coin}USDT"
+    
     def _get_multi_exchange_kline(self, symbol: str, timeframe: str, **kwargs) -> str:
         """
         Get kline data from multi-exchange system.
@@ -166,7 +213,10 @@ class DataProvider:
         # For now, get current price and create a simple kline-like response
         # This should be enhanced to support full historical data when needed
         try:
-            price = self.multi_exchange.get_current_price(symbol)
+            # Ensure symbol is in correct format for the exchange
+            normalized_symbol = symbol.replace('-', '').upper()
+            
+            price = self.multi_exchange.get_current_price(normalized_symbol)
             # Create a simplified kline response for backward compatibility
             # Format: [timestamp, open, high, low, close, volume]
             import time
