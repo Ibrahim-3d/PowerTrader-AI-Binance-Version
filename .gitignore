@@ -188,6 +188,19 @@ futures_*_onoff.txt
 neural_*.txt
 memory_*.txt
 *.html
+alerts_version.txt
+
+# Generated coin-specific folders
+app/BTC/
+app/ETH/
+app/XRP/
+app/DOGE/
+app/BNB/
+app/ADA/
+app/SOL/
+app/MATIC/
+app/DOT/
+app/AVAX/
 
 # IDE specific
 .vscode/
