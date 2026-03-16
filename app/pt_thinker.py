@@ -333,7 +333,7 @@ def _load_gui_coins() -> List[str]:
         coins = [str(c).strip().upper() for c in coins if str(c).strip()]
         if not coins:
             coins = list(_gui_settings_cache["coins"])
-        
+
         # Update cache for backwards compatibility
         _gui_settings_cache["coins"] = coins
         return list(coins)
@@ -349,7 +349,7 @@ def _get_futures_config() -> dict:
     try:
         settings = _load_gui_settings()
         futures_config = settings.get("futures_trading", {})
-        
+
         # Provide sensible defaults if not configured
         defaults = {
             "long_enabled": False,
@@ -357,12 +357,12 @@ def _get_futures_config() -> dict:
             "max_leverage": 10,
             "risk_per_trade": 2.0,
         }
-        
+
         # Merge user settings with defaults
         for key, default_value in defaults.items():
             if key not in futures_config:
                 futures_config[key] = default_value
-                
+
         return futures_config
     except Exception:
         # Fallback to safe defaults
@@ -1465,33 +1465,80 @@ def step_coin(sym: str):
 # Initialize only when run as main script, not during import
 def main():
     """Main entry point for pt_thinker when run as a script."""
-    # init all coins once (from GUI settings)
-    for _sym in CURRENT_COINS:
+    # Check for individual coin argument
+    target_coin = None
+    if len(sys.argv) > 1:
+        target_coin = sys.argv[1].upper().strip()
+        print(f"Neural Runner starting for individual coin: {target_coin}")
+        if target_coin not in CURRENT_COINS:
+            print(
+                f"Warning: {target_coin} not in configured coins list, adding temporarily"
+            )
+            CURRENT_COINS.append(target_coin)
+    else:
+        print("Neural Runner starting up for all coins...")
+
+    sys.stdout.flush()
+
+    # init target coin(s)
+    coins_to_process = [target_coin] if target_coin else CURRENT_COINS
+
+    for _sym in coins_to_process:
+        print(f"Initializing coin: {_sym}")
+        sys.stdout.flush()
         init_coin(_sym)
 
     # restore CWD to base after init
     os.chdir(BASE_DIR)
+    if target_coin:
+        print(
+            f"Initialization complete for {target_coin}. Starting individual coin processing loop..."
+        )
+    else:
+        print("Initialization complete. Starting main processing loop...")
+    sys.stdout.flush()
 
     # Main execution loop
     try:
+        iteration = 0
         while True:
-            # Hot-reload coins from GUI settings while running
-            _sync_coins_from_settings()
+            iteration += 1
+            if target_coin:
+                print(f"Processing iteration {iteration} for {target_coin}...")
+            else:
+                print(f"Processing iteration {iteration}...")
+            sys.stdout.flush()
 
-            for _sym in CURRENT_COINS:
+            # Hot-reload coins from GUI settings (only for all-coins mode)
+            if not target_coin:
+                _sync_coins_from_settings()
+                coins_to_process = CURRENT_COINS
+            else:
+                coins_to_process = [target_coin]
+
+            for _sym in coins_to_process:
+                print(f"Processing {_sym}...")
+                sys.stdout.flush()
                 step_coin(_sym)
 
-            # clear + re-print one combined screen (so you don't see old output above new)
-            os.system("cls" if os.name == "nt" else "clear")
+            # Comment out screen clearing for GUI visibility - let GUI handle display
+            # os.system("cls" if os.name == "nt" else "clear")
 
-            for _sym in CURRENT_COINS:
-                print(display_cache.get(_sym, _sym + "  (no data yet)"))
-                print("\n" + ("-" * 60) + "\n")
+            for _sym in coins_to_process:
+                output = display_cache.get(_sym, _sym + "  (no data yet)")
+                print(f"=== {_sym} ===")
+                print(output)
+                print("=" * 60)
+                sys.stdout.flush()
 
             # small sleep so you don't peg CPU when running many coins
-            time.sleep(0.15)
+            print(f"Completed iteration {iteration}, sleeping...")
+            sys.stdout.flush()
+            time.sleep(2)  # Increase sleep to 2 seconds for better UI visibility
 
-    except Exception:
+    except Exception as e:
+        print(f"Error in main loop: {e}")
+        sys.stdout.flush()
         PrintException()
 
 

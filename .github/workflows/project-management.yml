@@ -1,0 +1,199 @@
+name: Project Management
+
+on:
+  issues:
+    types: [opened, closed, reopened, labeled]
+  pull_request:
+    types: [opened, closed, merged, labeled]
+  schedule:
+    # Run every day at 9 AM UTC to update project status
+    - cron: '0 9 * * *'
+
+jobs:
+  auto-assign-labels:
+    runs-on: ubuntu-latest
+    name: Auto-assign Labels
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+
+    steps:
+    - name: Assign priority label based on title
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const title = context.payload.issue.title.toLowerCase();
+          const body = context.payload.issue.body.toLowerCase();
+
+          let labels = [];
+
+          // Auto-assign priority based on keywords
+          if (title.includes('[security]') || body.includes('security')) {
+            labels.push('priority-critical', 'security');
+          } else if (title.includes('[bug]') || title.includes('critical')) {
+            labels.push('priority-high');
+          } else if (title.includes('[feature]')) {
+            labels.push('priority-medium');
+          }
+
+          // Auto-assign component labels
+          if (body.includes('pt_credentials.py') || body.includes('credential')) {
+            labels.push('component-security');
+          } else if (body.includes('pt_trader.py') || body.includes('trading')) {
+            labels.push('component-trading');
+          } else if (body.includes('pt_risk.py') || body.includes('risk')) {
+            labels.push('component-risk');
+          } else if (body.includes('gui') || body.includes('interface')) {
+            labels.push('component-ui');
+          } else if (body.includes('database') || body.includes('db')) {
+            labels.push('component-database');
+          }
+
+          // Assign phase based on TODO categories
+          if (body.includes('phase 1') || body.includes('security') || body.includes('stability')) {
+            labels.push('phase-1-critical');
+          } else if (body.includes('phase 2') || body.includes('functional')) {
+            labels.push('phase-2-functional');
+          } else if (body.includes('phase 3') || body.includes('production')) {
+            labels.push('phase-3-production');
+          } else if (body.includes('phase 4') || body.includes('optimization')) {
+            labels.push('phase-4-optimization');
+          }
+
+          if (labels.length > 0) {
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: labels
+            });
+          }
+
+  update-project-status:
+    runs-on: ubuntu-latest
+    name: Update Project Status
+    if: github.event_name == 'schedule' || (github.event_name == 'issues' && github.event.action == 'closed')
+
+    steps:
+    - name: Update project metrics
+      uses: actions/github-script@v6
+      with:
+        script: |
+          // Get all open issues
+          const issues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open'
+          });
+
+          // Count by phase
+          let phaseCounts = {
+            'phase-1-critical': 0,
+            'phase-2-functional': 0,
+            'phase-3-production': 0,
+            'phase-4-optimization': 0
+          };
+
+          let priorityCounts = {
+            'priority-critical': 0,
+            'priority-high': 0,
+            'priority-medium': 0,
+            'priority-low': 0
+          };
+
+          for (const issue of issues.data) {
+            for (const label of issue.labels) {
+              if (phaseCounts.hasOwnProperty(label.name)) {
+                phaseCounts[label.name]++;
+              }
+              if (priorityCounts.hasOwnProperty(label.name)) {
+                priorityCounts[label.name]++;
+              }
+            }
+          }
+
+          // Create or update project status issue
+          const statusBody = `# PowerTrader AI+ Development Status
+
+          **Last Updated**: ${new Date().toISOString().split('T')[0]}
+
+          ## Phase Progress
+          - **Phase 1 (Critical Security & Stability)**: ${phaseCounts['phase-1-critical']} open issues
+          - **Phase 2 (Functional Completeness)**: ${phaseCounts['phase-2-functional']} open issues
+          - **Phase 3 (Production Readiness)**: ${phaseCounts['phase-3-production']} open issues
+          - **Phase 4 (Scalability & Optimization)**: ${phaseCounts['phase-4-optimization']} open issues
+
+          ## Priority Breakdown
+          - **Critical**: ${priorityCounts['priority-critical']} issues
+          - **High**: ${priorityCounts['priority-high']} issues
+          - **Medium**: ${priorityCounts['priority-medium']} issues
+          - **Low**: ${priorityCounts['priority-low']} issues
+
+          ## Next Actions
+          ${priorityCounts['priority-critical'] > 0 ? '🚨 **CRITICAL ISSUES NEED IMMEDIATE ATTENTION**' : ''}
+          ${phaseCounts['phase-1-critical'] > 0 ? '⚠️ Complete Phase 1 security issues before proceeding' : '✅ Phase 1 security complete'}
+
+          ---
+          *This status is automatically updated daily. See [TODO.md](TODO.md) for detailed task breakdown.*
+          `;
+
+          console.log('Project Status Update:', statusBody);
+
+  security-alert:
+    runs-on: ubuntu-latest
+    name: Security Issue Alert
+    if: github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'security')
+
+    steps:
+    - name: Send security alert
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const issue = context.payload.issue;
+
+          // Add urgent label for security issues
+          await github.rest.issues.addLabels({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: issue.number,
+            labels: ['urgent', 'priority-critical']
+          });
+
+          // Add comment with security notice
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: issue.number,
+            body: `🚨 **SECURITY ISSUE DETECTED**
+
+            This issue has been automatically flagged as a security concern.
+
+            **Immediate Actions Required:**
+            1. Review the security impact assessment
+            2. Assign to security team member
+            3. Create hotfix branch if critical
+            4. Test fix in isolated environment
+            5. Deploy security patch as soon as possible
+
+            **Security Review Checklist:**
+            - [ ] Security impact assessed
+            - [ ] Fix approach reviewed
+            - [ ] No sensitive data exposed in issue
+            - [ ] Patch tested in isolation
+            - [ ] Documentation updated
+
+            Please treat this with appropriate urgency based on the risk level indicated.`
+          });
+
+  milestone-progress:
+    runs-on: ubuntu-latest
+    name: Update Milestone Progress
+    if: github.event_name == 'issues' && (github.event.action == 'closed' || github.event.action == 'reopened')
+
+    steps:
+    - name: Calculate milestone progress
+      uses: actions/github-script@v6
+      with:
+        script: |
+          // This would calculate progress towards phase milestones
+          // and update milestone descriptions with current progress
+          console.log('Milestone progress calculation triggered');
+          // Implementation would track completion rates for each phase

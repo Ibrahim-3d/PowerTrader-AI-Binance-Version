@@ -1,0 +1,171 @@
+name: PowerTrader AI+ CI/CD
+
+on:
+  push:
+    branches: [ main, development-*, feature/* ]
+  pull_request:
+    branches: [ main, development-* ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scan
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit semgrep
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Run Safety (dependency vulnerability scan)
+      run: safety check --json --output safety-report.json || true
+
+    - name: Run Bandit (security static analysis)
+      run: bandit -r app/ -f json -o bandit-report.json || true
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          safety-report.json
+          bandit-report.json
+
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black flake8 pylint pytest coverage
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Run Black (code formatting check)
+      run: black --check --diff app/
+
+    - name: Run Flake8 (linting)
+      run: flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    - name: Run Pylint
+      run: pylint app/ --output-format=json > pylint-report.json || true
+
+    - name: Upload code quality reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: code-quality-reports
+        path: pylint-report.json
+
+  test:
+    runs-on: ubuntu-latest
+    name: Unit Tests
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-mock
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Create test database
+      run: |
+        mkdir -p test_data
+        touch test_data/test.db
+
+    - name: Run tests with coverage
+      run: |
+        pytest app/test_*.py -v --cov=app --cov-report=xml --cov-report=html
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  integration-test:
+    runs-on: ubuntu-latest
+    name: Integration Tests
+    needs: [security-scan, code-quality, test]
+    if: github.event_name == 'pull_request'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Run integration tests
+      run: |
+        cd app
+        python test_integration.py
+        python test_comprehensive.py
+
+  deployment-check:
+    runs-on: ubuntu-latest
+    name: Deployment Readiness
+    needs: [security-scan, code-quality, test, integration-test]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check for production readiness
+      run: |
+        echo "Checking production readiness..."
+        # Verify all critical files exist
+        test -f app/pt_hub.py || exit 1
+        test -f requirements.txt || exit 1
+        test -f TODO.md || exit 1
+
+        # Check for security issues in production code
+        grep -r "r_key.txt\|r_secret.txt" app/ && echo "ERROR: Plaintext credentials found" && exit 1 || echo "✓ No plaintext credentials"
+        grep -r "except:" app/ | wc -l | awk '{ if ($1 > 5) { print "ERROR: Too many bare except blocks:", $1; exit 1 } else { print "✓ Acceptable number of bare except blocks:", $1 } }'
+
+        echo "✓ Deployment readiness check passed"
+
+  notify-completion:
+    runs-on: ubuntu-latest
+    name: Notify Completion
+    needs: [security-scan, code-quality, test]
+    if: always()
+
+    steps:
+    - name: Notify CI/CD completion
+      run: |
+        if [ "${{ needs.security-scan.result }}" == "failure" ] || [ "${{ needs.code-quality.result }}" == "failure" ] || [ "${{ needs.test.result }}" == "failure" ]; then
+          echo "❌ CI/CD pipeline failed - please review the failed checks"
+          exit 1
+        else
+          echo "✅ CI/CD pipeline completed successfully"
+        fi
