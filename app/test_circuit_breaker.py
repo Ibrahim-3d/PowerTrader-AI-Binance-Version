@@ -56,7 +56,6 @@ class TestCircuitBreakerBasic(unittest.TestCase):
             except ValueError:
                 pass
         time.sleep(0.15)
-        # Two successes in HALF_OPEN → CLOSED
         self.cb.call(lambda: True)
         self.cb.call(lambda: True)
         self.assertEqual(self.cb.state, CircuitState.CLOSED)
@@ -83,6 +82,23 @@ class TestCircuitBreakerBasic(unittest.TestCase):
         self.cb.reset()
         self.assertEqual(self.cb.state, CircuitState.CLOSED)
 
+    def test_success_resets_failure_streak(self):
+        """Successes reset the failure streak while CLOSED."""
+        for _ in range(2):
+            try:
+                self.cb.call(lambda: (_ for _ in ()).throw(ValueError()))
+            except ValueError:
+                pass
+        self.cb.call(lambda: True)  # success resets failure_count
+        self.assertEqual(self.cb.state, CircuitState.CLOSED)
+        # Need full threshold again to open
+        for _ in range(3):
+            try:
+                self.cb.call(lambda: (_ for _ in ()).throw(ValueError()))
+            except ValueError:
+                pass
+        self.assertEqual(self.cb.state, CircuitState.OPEN)
+
 
 class TestCircuitBreakerDecorator(unittest.TestCase):
 
@@ -105,6 +121,13 @@ class TestCircuitBreakerDecorator(unittest.TestCase):
 
 class TestCircuitBreakerRegistry(unittest.TestCase):
 
+    def setUp(self):
+        # Isolate each test from module-level breakers and other tests
+        registry.clear()
+
+    def tearDown(self):
+        registry.clear()
+
     def test_singleton(self):
         r1 = CircuitBreakerRegistry()
         r2 = CircuitBreakerRegistry()
@@ -118,17 +141,46 @@ class TestCircuitBreakerRegistry(unittest.TestCase):
         cb1 = registry.register("reg_idem", failure_threshold=3, timeout=30)
         cb2 = registry.register("reg_idem", failure_threshold=99, timeout=99)
         self.assertIs(cb1, cb2)
+        # Config from first registration is preserved
+        self.assertEqual(cb1.failure_threshold, 3)
 
-    def test_health_summary(self):
+    def test_health_summary_empty(self):
         health = registry.get_health_summary()
         self.assertIn("healthy", health)
         self.assertIn("open_circuits", health)
+        self.assertTrue(health["healthy"])
+
+    def test_health_summary_with_open_circuit(self):
+        cb = registry.register("health_test", failure_threshold=1, timeout=60)
+        try:
+            cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
+        except RuntimeError:
+            pass
+        health = registry.get_health_summary()
+        self.assertFalse(health["healthy"])
+        self.assertIn("health_test", health["open_circuits"])
+
+    def test_clear(self):
+        registry.register("to_clear", failure_threshold=3, timeout=30)
+        registry.clear()
+        self.assertIsNone(registry.get("to_clear"))
+
+    def test_reset_all(self):
+        cb = registry.register("reset_test", failure_threshold=1, timeout=60)
+        try:
+            cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
+        except RuntimeError:
+            pass
+        self.assertEqual(cb.state, CircuitState.OPEN)
+        registry.reset_all()
+        self.assertEqual(cb.state, CircuitState.CLOSED)
 
 
 class TestCircuitBreakerStats(unittest.TestCase):
 
     def test_stats_track_calls(self):
-        cb = CircuitBreaker("stats_test", failure_threshold=10, timeout=60)
+        # Use isolated breaker (not registry) to avoid state leakage
+        cb = CircuitBreaker("stats_test_isolated", failure_threshold=10, timeout=60)
         cb.call(lambda: True)
         try:
             cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
@@ -140,7 +192,7 @@ class TestCircuitBreakerStats(unittest.TestCase):
         self.assertEqual(stats["stats"]["total_calls"], 2)
 
     def test_stats_track_rejections(self):
-        cb = CircuitBreaker("reject_test", failure_threshold=2, timeout=60)
+        cb = CircuitBreaker("reject_test_isolated", failure_threshold=2, timeout=60)
         for _ in range(2):
             try:
                 cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
@@ -152,6 +204,19 @@ class TestCircuitBreakerStats(unittest.TestCase):
             pass
         stats = cb.get_stats()
         self.assertEqual(stats["stats"]["rejected_count"], 1)
+
+    def test_stats_reset_on_recovery(self):
+        cb = CircuitBreaker("recovery_stats", failure_threshold=2, success_threshold=1, timeout=0.05)
+        for _ in range(2):
+            try:
+                cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
+            except RuntimeError:
+                pass
+        time.sleep(0.08)
+        cb.call(lambda: True)  # triggers CLOSED
+        stats = cb.get_stats()
+        # After recovery, failure_count reset to 0
+        self.assertEqual(stats["stats"]["failure_count"], 0)
 
 
 if __name__ == "__main__":
