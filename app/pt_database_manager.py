@@ -1,7 +1,10 @@
 """
 PowerTraderAI+ Database Security & Transaction Management
 Provides atomic transaction wrappers with retry-on-busy, connection health
-monitoring, input sanitization, and deadlock detection for SQLite databases.
+monitoring, input sanitization, and retry-on-contention (SQLITE_BUSY/LOCKED) for SQLite.
+
+Note: SQLite uses file-level locking, not true deadlocks. The retry mechanism handles
+SQLITE_BUSY and SQLITE_LOCKED (write contention), not classic deadlocks.
 
 Designed to complement the existing OrderManagementDB / SQLAlchemy layer.
 Can also be used standalone for direct SQLite access.
@@ -127,8 +130,10 @@ class DatabaseConnectionPool:
             return False
         try:
             conn = sqlite3.connect(self.db_path, timeout=5)
-            result = conn.execute("PRAGMA integrity_check").fetchone()
-            conn.close()
+            try:
+                result = conn.execute("PRAGMA integrity_check").fetchone()
+            finally:
+                conn.close()
             healthy = result and result[0] == "ok"
             with self._stats_lock:
                 if not healthy:
@@ -201,7 +206,11 @@ def atomic_transaction(
         except sqlite3.OperationalError as exc:
             err_lower = str(exc).lower()
             is_contention = any(w in err_lower for w in ("busy", "locked", "cannot start"))
-            if not is_contention or attempt >= max_retries:
+            if not is_contention:
+                # Non-contention OperationalError (e.g. constraint violation, syntax error)
+                # — propagate original exception unchanged; do not wrap as TransactionError.
+                raise
+            if attempt >= max_retries:
                 logger.error("Transaction failed after %d attempt(s): %s", attempt + 1, exc)
                 raise TransactionError(
                     f"Transaction failed after {attempt + 1} attempt(s): {exc}"
@@ -308,7 +317,7 @@ class DatabaseHealthMonitor:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, name="DBHealthMonitor", daemon=True)
         self._thread.start()
-        logger.info("DB health monitor started (interval: %ds)", self._interval)
+        logger.info("DB health monitor started (interval: %ss)", self._interval)
 
     def stop(self) -> None:
         self._stop_event.set()

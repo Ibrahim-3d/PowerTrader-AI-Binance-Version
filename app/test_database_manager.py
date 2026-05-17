@@ -1,11 +1,13 @@
 """Tests for pt_database_manager - issue #54."""
 
 import os
+import shutil
 import sqlite3
 import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import MagicMock
 
 from pt_database_manager import (
     DatabaseConnectionPool,
@@ -32,6 +34,11 @@ class TestDatabaseConnectionPool(unittest.TestCase):
         _make_db(self.db)
         self.pool = DatabaseConnectionPool(self.db)
 
+    def tearDown(self):
+        # Close thread-local connection before removing temp dir (critical on Windows)
+        self.pool.close_thread_connection()
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
     def test_get_connection_returns_connection(self):
         conn = self.pool.get_connection()
         self.assertIsInstance(conn, sqlite3.Connection)
@@ -43,13 +50,24 @@ class TestDatabaseConnectionPool(unittest.TestCase):
 
     def test_different_threads_get_different_connections(self):
         connections = []
+        errors = []
+        barrier = threading.Barrier(2, timeout=5)
+
         def get_conn():
-            connections.append(self.pool.get_connection())
+            try:
+                barrier.wait()
+                conn = self.pool.get_connection()
+                connections.append(conn)
+                self.pool.close_thread_connection()
+            except Exception as exc:
+                errors.append(exc)
 
         t1 = threading.Thread(target=get_conn)
         t2 = threading.Thread(target=get_conn)
         t1.start(); t2.start()
         t1.join(); t2.join()
+
+        self.assertEqual(errors, [], f"Thread errors: {errors}")
         self.assertEqual(len(connections), 2)
         self.assertIsNot(connections[0], connections[1])
 
@@ -76,10 +94,6 @@ class TestDatabaseConnectionPool(unittest.TestCase):
         self.assertGreater(stats["total_connections_created"], 0)
         self.assertTrue(stats["db_exists"])
 
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.tmpdir, ignore_errors=True)
-
 
 class TestAtomicTransaction(unittest.TestCase):
 
@@ -87,12 +101,10 @@ class TestAtomicTransaction(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp()
         self.db = os.path.join(self.tmpdir, "atomic.db")
         _make_db(self.db)
-        # isolation_level=None for manual transaction control
         self.conn = sqlite3.connect(self.db, isolation_level=None)
 
     def tearDown(self):
         self.conn.close()
-        import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_commits_on_success(self):
@@ -122,35 +134,51 @@ class TestAtomicTransaction(unittest.TestCase):
         try:
             with atomic_transaction(self.conn) as c:
                 c.execute("INSERT INTO t VALUES (5, 'ok')")
-                c.execute("INSERT INTO t VALUES (5, 'dup')")  # duplicate PK
+                c.execute("INSERT INTO t VALUES (5, 'dup')")  # duplicate PK → OperationalError
         except Exception:
             pass
         row = self.conn.execute("SELECT * FROM t WHERE id=5").fetchone()
         self.assertIsNone(row)
 
-    def test_raises_transaction_error_on_non_retryable(self):
-        """Non-busy OperationalError should propagate as TransactionError."""
+    def test_non_contention_error_propagates_original(self):
+        """Non-busy OperationalError should propagate as original sqlite3.OperationalError,
+        NOT wrapped as TransactionError."""
         bad_conn = sqlite3.connect(":memory:", isolation_level=None)
         bad_conn.execute("CREATE TABLE x (id INTEGER PRIMARY KEY)")
-        with self.assertRaises(Exception):
-            with atomic_transaction(bad_conn) as c:
-                c.execute("INSERT INTO nonexistent VALUES (1)")
-        bad_conn.close()
+        try:
+            with self.assertRaises(sqlite3.OperationalError):
+                with atomic_transaction(bad_conn) as c:
+                    c.execute("SELECT * FROM nonexistent_table")
+        finally:
+            bad_conn.close()
+
+    def test_contention_retries_then_raises_transaction_error(self):
+        """When max_retries exceeded on busy/locked, TransactionError is raised."""
+        # Create a second connection that holds a write lock
+        blocker = sqlite3.connect(self.db, isolation_level=None)
+        blocker.execute("BEGIN EXCLUSIVE")
+        try:
+            with self.assertRaises(TransactionError):
+                with atomic_transaction(
+                    sqlite3.connect(self.db, timeout=0.01, isolation_level=None),
+                    max_retries=1, base_delay=0.01,
+                ) as c:
+                    c.execute("INSERT INTO t VALUES (99, 'blocked')")
+        finally:
+            blocker.execute("ROLLBACK")
+            blocker.close()
 
 
 class TestInputSanitizer(unittest.TestCase):
 
     def test_sanitize_strips_null_bytes(self):
-        result = InputSanitizer.sanitize_string("hello\x00world")
-        self.assertNotIn("\x00", result)
+        self.assertNotIn("\x00", InputSanitizer.sanitize_string("hello\x00world"))
 
     def test_sanitize_caps_length(self):
-        result = InputSanitizer.sanitize_string("x" * 1000, max_length=10)
-        self.assertEqual(len(result), 10)
+        self.assertEqual(len(InputSanitizer.sanitize_string("x" * 1000, max_length=10)), 10)
 
     def test_sanitize_non_string_converted(self):
-        result = InputSanitizer.sanitize_string(42)
-        self.assertEqual(result, "42")
+        self.assertEqual(InputSanitizer.sanitize_string(42), "42")
 
     def test_check_sql_injection_drop(self):
         self.assertTrue(InputSanitizer.check_sql_injection("DROP TABLE users"))
@@ -172,14 +200,12 @@ class TestInputSanitizer(unittest.TestCase):
             InputSanitizer.safe_identifier("1invalid")
 
     def test_sanitize_record(self):
-        record = {"symbol": "BTC-USD", "note": "hello\x00"}
-        result = InputSanitizer.sanitize_record(record)
+        result = InputSanitizer.sanitize_record({"symbol": "BTC-USD", "note": "hello\x00"})
         self.assertNotIn("\x00", result["note"])
         self.assertEqual(result["symbol"], "BTC-USD")
 
     def test_sanitize_record_clears_injection(self):
-        record = {"name": "'; DROP TABLE orders; --"}
-        result = InputSanitizer.sanitize_record(record)
+        result = InputSanitizer.sanitize_record({"name": "'; DROP TABLE orders; --"})
         self.assertEqual(result["name"], "")
 
 
@@ -191,16 +217,13 @@ class TestDatabaseHealthMonitor(unittest.TestCase):
         _make_db(self.db)
 
     def tearDown(self):
-        import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_check_now_healthy(self):
-        monitor = DatabaseHealthMonitor(self.db)
-        self.assertTrue(monitor.check_now())
+        self.assertTrue(DatabaseHealthMonitor(self.db).check_now())
 
     def test_check_now_missing_file(self):
-        monitor = DatabaseHealthMonitor("/nonexistent/path.db")
-        self.assertFalse(monitor.check_now())
+        self.assertFalse(DatabaseHealthMonitor("/nonexistent/path.db").check_now())
 
     def test_start_stop(self):
         monitor = DatabaseHealthMonitor(self.db, check_interval=60)
@@ -217,12 +240,11 @@ class TestDatabaseHealthMonitor(unittest.TestCase):
         self.assertEqual(status["db_path"], self.db)
 
     def test_on_corrupt_callback_not_fired_for_healthy_db(self):
-        cb = unittest.mock.MagicMock()
+        cb = MagicMock()
         monitor = DatabaseHealthMonitor(self.db, on_corrupt=cb)
         monitor.check_now()
         cb.assert_not_called()
 
 
 if __name__ == "__main__":
-    import unittest.mock
     unittest.main()
