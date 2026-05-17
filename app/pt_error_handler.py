@@ -26,11 +26,9 @@ import threading
 from typing import Callable, Dict, List, Optional
 
 from pt_errors import (
-    ErrorCategory,
     ErrorHandler,
     ErrorReport,
     ErrorSeverity,
-    PowerTraderError,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,30 +49,35 @@ class ApplicationErrorHandler:
     Wraps pt_errors.ErrorHandler and adds:
     - Per-severity notification callbacks (e.g. pop GUI alerts for CRITICAL)
     - Global error bus: all modules share one instance
-    - Thread-safe callback registration / invocation
-    - Error suppression rules for known noisy errors
+    - Thread-safe init, callback registration, and invocation
+    - Error suppression rules for known noisy modules
     """
 
     _instance: Optional["ApplicationErrorHandler"] = None
-    _lock = threading.Lock()
+    _class_lock = threading.Lock()     # Guards singleton creation
+    _init_lock = threading.Lock()      # Guards lazy initialisation
 
     def __new__(cls) -> "ApplicationErrorHandler":
-        with cls._lock:
+        with cls._class_lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
                 cls._instance._initialised = False
             return cls._instance
 
     def _ensure_init(self) -> None:
+        """Thread-safe double-checked lazy initialisation."""
         if self._initialised:
             return
-        self._handler = ErrorHandler(logger=logging.getLogger("pt.errors"))
-        self._callbacks: Dict[ErrorSeverity, List[NotificationCallback]] = {
-            sev: [] for sev in ErrorSeverity
-        }
-        self._suppressed_modules: set = set()
-        self._cb_lock = threading.Lock()
-        self._initialised = True
+        with self._init_lock:
+            if self._initialised:   # re-check after acquiring lock
+                return
+            self._handler = ErrorHandler(logger=logging.getLogger("pt.errors"))
+            self._callbacks: Dict[ErrorSeverity, List[NotificationCallback]] = {
+                sev: [] for sev in ErrorSeverity
+            }
+            self._suppressed_modules: set = set()
+            self._cb_lock = threading.Lock()
+            self._initialised = True
 
     # ------------------------------------------------------------------
     # Callback registration
@@ -91,10 +94,10 @@ class ApplicationErrorHandler:
             self._callbacks[severity].append(callback)
 
     def unregister_all(self, severity: Optional[ErrorSeverity] = None) -> None:
-        """Clear callbacks for a severity level (or all levels if None)."""
+        """Clear callbacks for a severity level, or all levels if severity is None."""
         self._ensure_init()
         with self._cb_lock:
-            if severity:
+            if severity is not None:
                 self._callbacks[severity].clear()
             else:
                 for cbs in self._callbacks.values():
@@ -104,7 +107,7 @@ class ApplicationErrorHandler:
     # Suppression
     # ------------------------------------------------------------------
     def suppress_module(self, module_name: str) -> None:
-        """Suppress notifications for errors originating from `module_name`."""
+        """Suppress notification callbacks for errors from `module_name`."""
         self._ensure_init()
         self._suppressed_modules.add(module_name)
 
@@ -142,12 +145,26 @@ class ApplicationErrorHandler:
     def handle_critical(
         self, error: Exception, context: Optional[Dict] = None
     ) -> ErrorReport:
-        """Handle and immediately fire all CRITICAL callbacks."""
+        """
+        Handle an exception and escalate to CRITICAL severity regardless of
+        automatic classification. Fires CRITICAL-level callbacks only.
+
+        The underlying ErrorHandler classifies and logs the error first; the
+        severity field on the returned ErrorReport is then set to CRITICAL so
+        that `get_critical_errors()` and the CRITICAL callback list both see
+        the escalated severity consistently.
+        """
         self._ensure_init()
         report = self._handler.handle_error(error, context=context)
-        # Force severity to CRITICAL for escalation
+
         if report.severity != ErrorSeverity.CRITICAL:
+            # Update the stored report so stats and `get_critical_errors()` agree
             report.severity = ErrorSeverity.CRITICAL
+            # Also update the in-place error_counts to include CRITICAL
+            self._handler.error_counts[ErrorSeverity.CRITICAL.value] = (
+                self._handler.error_counts.get(ErrorSeverity.CRITICAL.value, 0) + 1
+            )
+
         self._fire_callbacks(report)
         return report
 
@@ -160,8 +177,9 @@ class ApplicationErrorHandler:
         for cb in callbacks:
             try:
                 cb(report)
-            except Exception as cb_exc:
-                logger.warning("Error callback raised an exception: %s", cb_exc)
+            except Exception:
+                # Log full traceback so callback bugs are diagnosable
+                logger.warning("Error callback raised an exception", exc_info=True)
 
     # ------------------------------------------------------------------
     # Query / stats
@@ -182,15 +200,15 @@ class ApplicationErrorHandler:
         ]
 
     def clear_history(self) -> None:
-        """Clear in-memory error history (does NOT affect logs)."""
+        """Clear in-memory error history (does NOT affect log files)."""
         self._ensure_init()
         self._handler.error_reports.clear()
         self._handler.error_counts.clear()
 
     @classmethod
     def reset_singleton(cls) -> None:
-        """Reset singleton — for testing only."""
-        with cls._lock:
+        """Destroy singleton and force re-init on next call. For testing only."""
+        with cls._class_lock:
             cls._instance = None
 
 
@@ -243,7 +261,7 @@ def configure_gui_alerts(
         )
     """
     handler = get_handler()
-    if critical_callback:
+    if critical_callback is not None:
         handler.register_callback(ErrorSeverity.CRITICAL, critical_callback)
-    if error_callback:
+    if error_callback is not None:
         handler.register_callback(ErrorSeverity.HIGH, error_callback)
