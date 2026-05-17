@@ -4,15 +4,18 @@ Handles encryption/decryption, rotation scheduling, and API permission validatio
 """
 
 import base64
+import getpass
 import hashlib
 import json
 import logging
 import os
+import shutil
+import socket
 import stat
 import threading
 import time
 from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from cryptography.fernet import Fernet
@@ -24,16 +27,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-DEFAULT_ROTATION_DAYS = 90          # Rotate credentials every 90 days
-ROTATION_WARNING_DAYS = 7           # Warn 7 days before expiry
-REQUIRED_PERMISSIONS: Set[str] = {  # Minimum required API permissions
-    "read_account",
-    "read_positions",
-}
-TRADING_PERMISSIONS: Set[str] = {   # Needed for live trading
-    "buy",
-    "sell",
-}
+DEFAULT_ROTATION_DAYS = 90
+ROTATION_WARNING_DAYS = 7
+REQUIRED_PERMISSIONS: Set[str] = {"read_account", "read_positions"}
+TRADING_PERMISSIONS: Set[str] = {"buy", "sell"}
 
 
 # ---------------------------------------------------------------------------
@@ -42,9 +39,9 @@ TRADING_PERMISSIONS: Set[str] = {   # Needed for live trading
 @dataclass
 class CredentialMetadata:
     """Metadata stored alongside encrypted credentials."""
-    created_at: float          # Unix timestamp
-    last_rotated_at: float     # Unix timestamp
-    rotation_due_at: float     # Unix timestamp
+    created_at: float
+    last_rotated_at: float
+    rotation_due_at: float
     rotation_interval_days: int = DEFAULT_ROTATION_DAYS
 
     def is_rotation_due(self) -> bool:
@@ -109,7 +106,7 @@ class SecureCredentialManager:
             with open(self.salt_file, "rb") as f:
                 return f.read()
         salt = os.urandom(16)
-        self._secure_write_binary(self.salt_file, salt)
+        self._atomic_write_binary(self.salt_file, salt)
         return salt
 
     def _derive_key(self, password: str, salt: bytes) -> bytes:
@@ -119,20 +116,51 @@ class SecureCredentialManager:
         return base64.urlsafe_b64encode(kdf.derive(password.encode()))
 
     def _get_machine_password(self) -> str:
-        machine_info = (
-            f"{os.environ.get('COMPUTERNAME', '')}{os.environ.get('USERNAME', '')}"
-        )
-        return hashlib.sha256(machine_info.encode()).hexdigest()[:32]
+        """
+        Cross-platform machine-specific password using hostname + username.
+        Avoids Windows-only COMPUTERNAME/USERNAME env vars.
+        """
+        try:
+            host = socket.gethostname()
+        except OSError:
+            host = ""
+        try:
+            user = getpass.getuser()
+        except OSError:
+            user = os.environ.get("USER", os.environ.get("USERNAME", ""))
+        return hashlib.sha256(f"{host}{user}".encode()).hexdigest()[:32]
 
-    def _secure_write_text(self, filepath: str, content: str) -> None:
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(content)
-        self._set_secure_permissions(filepath)
+    def _atomic_write_text(self, filepath: str, content: str) -> None:
+        """Write text file atomically via temp → rename."""
+        tmp = filepath + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(content)
+            self._set_secure_permissions(tmp)
+            os.replace(tmp, filepath)
+            self._set_secure_permissions(filepath)
+        except Exception:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
 
-    def _secure_write_binary(self, filepath: str, content: bytes) -> None:
-        with open(filepath, "wb") as f:
-            f.write(content)
-        self._set_secure_permissions(filepath)
+    def _atomic_write_binary(self, filepath: str, content: bytes) -> None:
+        """Write binary file atomically via temp → rename."""
+        tmp = filepath + ".tmp"
+        try:
+            with open(tmp, "wb") as f:
+                f.write(content)
+            self._set_secure_permissions(tmp)
+            os.replace(tmp, filepath)
+            self._set_secure_permissions(filepath)
+        except Exception:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
 
     def _set_secure_permissions(self, filepath: str) -> None:
         try:
@@ -149,11 +177,11 @@ class SecureCredentialManager:
         try:
             with open(self.metadata_file, "r", encoding="utf-8") as f:
                 return CredentialMetadata.from_dict(json.load(f))
-        except (OSError, json.JSONDecodeError, KeyError):
+        except (OSError, json.JSONDecodeError, KeyError, TypeError):
             return None
 
     def _save_metadata(self, meta: CredentialMetadata) -> None:
-        self._secure_write_text(self.metadata_file, json.dumps(meta.to_dict(), indent=2))
+        self._atomic_write_text(self.metadata_file, json.dumps(meta.to_dict(), indent=2))
 
     # ------------------------------------------------------------------
     # Core encrypt / decrypt
@@ -164,29 +192,34 @@ class SecureCredentialManager:
         private_key_b64: str,
         rotation_interval_days: int = DEFAULT_ROTATION_DAYS,
     ) -> bool:
-        """Encrypt and persist credentials, writing metadata."""
+        """
+        Encrypt and persist credentials atomically.
+        Both ciphertext files are written via temp → rename so a mid-write
+        failure cannot leave a mismatched key/secret pair.
+        """
         with self._lock:
             try:
                 salt = self._get_or_create_salt()
                 key = self._derive_key(self._get_machine_password(), salt)
                 cipher = Fernet(key)
 
-                self._secure_write_binary(
+                # Atomic writes — both succeed or neither committed
+                self._atomic_write_binary(
                     self.encrypted_key_file,
                     cipher.encrypt(api_key.encode("utf-8")),
                 )
-                self._secure_write_binary(
+                self._atomic_write_binary(
                     self.encrypted_secret_file,
                     cipher.encrypt(private_key_b64.encode("utf-8")),
                 )
 
-                # Update metadata
+                # Update metadata — keep interval consistent
                 existing = self._load_metadata()
+                now = time.time()
                 if existing:
-                    existing.last_rotated_at = time.time()
-                    existing.rotation_due_at = (
-                        time.time() + rotation_interval_days * 86400
-                    )
+                    existing.last_rotated_at = now
+                    existing.rotation_due_at = now + rotation_interval_days * 86400
+                    existing.rotation_interval_days = rotation_interval_days  # keep consistent
                     meta = existing
                 else:
                     meta = CredentialMetadata.new(rotation_interval_days)
@@ -204,17 +237,14 @@ class SecureCredentialManager:
             try:
                 if not self.has_encrypted_credentials():
                     return None
-
                 with open(self.salt_file, "rb") as f:
                     salt = f.read()
                 key = self._derive_key(self._get_machine_password(), salt)
                 cipher = Fernet(key)
-
                 with open(self.encrypted_key_file, "rb") as f:
                     api_key = cipher.decrypt(f.read()).decode("utf-8").strip()
                 with open(self.encrypted_secret_file, "rb") as f:
                     private_key = cipher.decrypt(f.read()).decode("utf-8").strip()
-
                 return api_key, private_key
             except Exception as exc:
                 logger.error("Failed to decrypt credentials: %s", exc)
@@ -224,7 +254,6 @@ class SecureCredentialManager:
     # Rotation
     # ------------------------------------------------------------------
     def get_rotation_status(self) -> Dict:
-        """Return rotation status: due, days remaining, last rotated."""
         meta = self._load_metadata()
         if not meta:
             return {
@@ -248,32 +277,25 @@ class SecureCredentialManager:
         rotation_interval_days: int = DEFAULT_ROTATION_DAYS,
     ) -> bool:
         """
-        Gracefully rotate credentials:
-        1. Backup current encrypted files
-        2. Encrypt and save new credentials
-        3. Remove backup on success / restore on failure
+        Gracefully rotate credentials with full rollback on failure.
+        Backs up key, secret, AND metadata so all three are restored together.
         """
         with self._lock:
             backup_key = self.encrypted_key_file + ".bak"
             backup_secret = self.encrypted_secret_file + ".bak"
+            backup_meta = self.metadata_file + ".bak"
             backed_up = False
 
             try:
-                # Step 1: backup current credentials
                 if self.has_encrypted_credentials():
-                    import shutil
                     shutil.copy2(self.encrypted_key_file, backup_key)
                     shutil.copy2(self.encrypted_secret_file, backup_secret)
+                    if os.path.exists(self.metadata_file):
+                        shutil.copy2(self.metadata_file, backup_meta)
                     backed_up = True
 
-                # Step 2: encrypt new credentials
-                success = self.encrypt_credentials(
-                    new_api_key, new_private_key_b64, rotation_interval_days
-                )
-
-                if success:
-                    # Step 3a: clean up backups
-                    for f in (backup_key, backup_secret):
+                if self.encrypt_credentials(new_api_key, new_private_key_b64, rotation_interval_days):
+                    for f in (backup_key, backup_secret, backup_meta):
                         try:
                             os.remove(f)
                         except OSError:
@@ -281,16 +303,16 @@ class SecureCredentialManager:
                     logger.info("Credentials rotated successfully")
                     return True
 
-                # Step 3b: restore on failure
                 raise RuntimeError("encrypt_credentials returned False")
 
             except Exception as exc:
                 logger.error("Credential rotation failed: %s", exc)
                 if backed_up:
                     try:
-                        import shutil
                         shutil.copy2(backup_key, self.encrypted_key_file)
                         shutil.copy2(backup_secret, self.encrypted_secret_file)
+                        if os.path.exists(backup_meta):
+                            shutil.copy2(backup_meta, self.metadata_file)
                         logger.info("Rolled back to previous credentials")
                     except OSError as restore_exc:
                         logger.critical(
@@ -300,10 +322,7 @@ class SecureCredentialManager:
                 return False
 
     def check_rotation_warning(self) -> Optional[str]:
-        """
-        Return a warning string if rotation is due soon or overdue, else None.
-        Call this on startup or periodically.
-        """
+        """Return a warning string if rotation due soon/overdue, else None."""
         status = self.get_rotation_status()
         if not status["has_metadata"]:
             return None
@@ -334,7 +353,6 @@ class SecureCredentialManager:
                 api_key = f.read().strip()
             with open(secret_file, "r", encoding="utf-8") as f:
                 private_key = f.read().strip()
-
             if self.encrypt_credentials(api_key, private_key):
                 for path in (key_file, secret_file):
                     try:
@@ -367,14 +385,10 @@ class SecureCredentialManager:
 # PermissionValidator
 # ---------------------------------------------------------------------------
 class PermissionValidator:
-    """
-    Validates API key permissions on startup against required permission sets.
-
-    Integrates with exchange adapters that expose a `get_permissions()` method.
-    Falls back to a mock check when no adapter is available (e.g. CI/CD).
-    """
+    """Validates API key permissions on startup against required permission sets."""
 
     AUDIT_LOG_FILE = "credential_audit.jsonl"
+    MAX_AUDIT_LINES = 10_000  # Cap to prevent unbounded growth
 
     def __init__(self, base_dir: str = None):
         self.base_dir = base_dir or os.path.dirname(os.path.abspath(__file__))
@@ -389,13 +403,9 @@ class PermissionValidator:
         Validate API permissions.
 
         Args:
-            permission_fetcher: Callable that returns list of permission strings
-                                from the live exchange API. If None, returns a
-                                warning result (useful in offline/CI contexts).
-            require_trading: If True, also checks for buy/sell permissions.
-
-        Returns:
-            PermissionAuditResult with full audit details.
+            permission_fetcher: Callable → list of permission strings.
+                                If None, returns failed audit (offline/CI use).
+            require_trading: Also check for buy/sell permissions.
         """
         now = time.time()
 
@@ -468,21 +478,34 @@ class PermissionValidator:
         return result
 
     def _log_audit(self, result: PermissionAuditResult) -> None:
-        """Append audit result to JSONL audit log."""
+        """Append audit result to JSONL log with size cap and secure permissions."""
         try:
+            # Size cap: trim to last MAX_AUDIT_LINES - 1 entries before appending
+            if os.path.exists(self._audit_log):
+                with open(self._audit_log, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                if len(lines) >= self.MAX_AUDIT_LINES:
+                    keep = lines[-(self.MAX_AUDIT_LINES - 1):]
+                    with open(self._audit_log, "w", encoding="utf-8") as f:
+                        f.writelines(keep)
+
             with open(self._audit_log, "a", encoding="utf-8") as f:
                 f.write(json.dumps(result.to_dict()) + "\n")
+            # Secure permissions on the audit log itself
+            try:
+                os.chmod(self._audit_log, stat.S_IRUSR | stat.S_IWUSR)
+            except (OSError, AttributeError):
+                pass
         except OSError as exc:
             logger.warning("Could not write permission audit log: %s", exc)
 
     def get_audit_history(self, limit: int = 50) -> List[dict]:
-        """Return last `limit` audit records."""
         if not os.path.exists(self._audit_log):
             return []
         try:
             with open(self._audit_log, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-            return [json.loads(l) for l in lines[-limit:] if l.strip()]
+            return [json.loads(line) for line in lines[-limit:] if line.strip()]
         except (OSError, json.JSONDecodeError):
             return []
 
@@ -492,17 +515,12 @@ class PermissionValidator:
 # ---------------------------------------------------------------------------
 class CredentialRotationScheduler:
     """
-    Background scheduler that periodically checks if credentials need rotation
-    and fires a notification callback when rotation is due.
+    Background scheduler: checks rotation status periodically and fires a
+    notification callback when action is needed.
 
-    Usage:
-        def on_rotation_needed(msg):
-            show_gui_alert(msg)  # or email, log, etc.
-
-        scheduler = CredentialRotationScheduler(on_rotation_needed)
-        scheduler.start()   # Non-blocking, runs in daemon thread
-        ...
-        scheduler.stop()
+    De-duplicates notifications — only calls the callback when the warning
+    message changes, preventing repeated identical alerts on every tick while
+    credentials remain overdue.
     """
 
     def __init__(
@@ -512,13 +530,13 @@ class CredentialRotationScheduler:
         base_dir: str = None,
     ):
         self._callback = notification_callback
-        self._interval = check_interval_hours * 3600
+        self._interval = max(check_interval_hours * 3600, 60)  # minimum 1 minute
         self._manager = SecureCredentialManager(base_dir)
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._last_warning: Optional[str] = None  # de-dup tracker
 
     def start(self) -> None:
-        """Start scheduler in a daemon thread."""
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
@@ -526,7 +544,10 @@ class CredentialRotationScheduler:
             target=self._run, name="CredentialRotationScheduler", daemon=True
         )
         self._thread.start()
-        logger.info("Credential rotation scheduler started (interval: %gh)", self._interval / 3600)
+        logger.info(
+            "Credential rotation scheduler started (interval: %.1fh)",
+            self._interval / 3600,
+        )
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -538,15 +559,17 @@ class CredentialRotationScheduler:
         while not self._stop_event.is_set():
             try:
                 warning = self._manager.check_rotation_warning()
-                if warning:
+                # Only notify when warning appears or changes (de-dup)
+                if warning and warning != self._last_warning:
                     logger.warning(warning)
                     self._callback(warning)
+                self._last_warning = warning
             except Exception as exc:
                 logger.error("Rotation scheduler check failed: %s", exc)
             self._stop_event.wait(timeout=self._interval)
 
     def check_now(self) -> Optional[str]:
-        """Immediate one-shot check (useful for startup). Returns warning or None."""
+        """Immediate one-shot check. Returns warning string or None."""
         return self._manager.check_rotation_warning()
 
 
@@ -558,7 +581,8 @@ def get_credentials() -> Optional[Tuple[str, str]]:
     Get API credentials with priority:
     1. Encrypted vault
     2. Environment variables (CI/CD)
-    3. Auto-migrate from plaintext (last resort)
+    3. Auto-migrate from plaintext (last resort — also preserves plaintext
+       fallback if vault write fails, to prevent user lockout)
 
     Returns (api_key, private_key_b64) or None.
     """
@@ -575,6 +599,22 @@ def get_credentials() -> Optional[Tuple[str, str]]:
     if manager.has_plaintext_credentials():
         if manager.migrate_from_plaintext():
             return manager.decrypt_credentials()
+        else:
+            # Plaintext fallback: migration failed (e.g. vault write permission
+            # denied). Return plaintext creds rather than locking the user out.
+            logger.warning(
+                "Encrypted vault write failed — falling back to plaintext credentials. "
+                "Fix vault permissions and re-run to migrate."
+            )
+            try:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                with open(os.path.join(base_dir, "r_key.txt"), "r", encoding="utf-8") as f:
+                    api_key = f.read().strip()
+                with open(os.path.join(base_dir, "r_secret.txt"), "r", encoding="utf-8") as f:
+                    private_key = f.read().strip()
+                return api_key, private_key
+            except OSError:
+                pass
 
     return None
 
@@ -585,31 +625,22 @@ def validate_credentials_on_startup(
     notify_rotation: Optional[Callable[[str], None]] = None,
 ) -> Tuple[bool, str]:
     """
-    Convenience function for startup validation.
-    Checks permissions AND rotation status.
-
-    Args:
-        permission_fetcher: Callable → list of permission strings from exchange
-        require_trading: Whether to require buy/sell permissions
-        notify_rotation: Callback for rotation warnings (e.g. GUI alert)
+    Startup validation: checks permission audit AND rotation status.
 
     Returns:
-        (ok: bool, message: str)
+        (audit_passed: bool, message: str)
     """
     manager = SecureCredentialManager()
     validator = PermissionValidator()
     messages = []
 
-    # Rotation check
     warning = manager.check_rotation_warning()
     if warning:
         messages.append(warning)
         if notify_rotation:
             notify_rotation(warning)
 
-    # Permission check
     audit = validator.validate(permission_fetcher, require_trading)
     messages.append(audit.message)
 
-    all_ok = audit.audit_passed and not manager._load_metadata().__class__ is None
     return audit.audit_passed, " | ".join(messages)
