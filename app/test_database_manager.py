@@ -1,0 +1,228 @@
+"""Tests for pt_database_manager - issue #54."""
+
+import os
+import sqlite3
+import tempfile
+import threading
+import time
+import unittest
+
+from pt_database_manager import (
+    DatabaseConnectionPool,
+    DatabaseCorruptionError,
+    DatabaseHealthMonitor,
+    InputSanitizer,
+    TransactionError,
+    atomic_transaction,
+)
+
+
+def _make_db(path: str) -> None:
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, val TEXT)")
+    conn.commit()
+    conn.close()
+
+
+class TestDatabaseConnectionPool(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.db = os.path.join(self.tmpdir, "test.db")
+        _make_db(self.db)
+        self.pool = DatabaseConnectionPool(self.db)
+
+    def test_get_connection_returns_connection(self):
+        conn = self.pool.get_connection()
+        self.assertIsInstance(conn, sqlite3.Connection)
+
+    def test_thread_local_same_connection(self):
+        c1 = self.pool.get_connection()
+        c2 = self.pool.get_connection()
+        self.assertIs(c1, c2)
+
+    def test_different_threads_get_different_connections(self):
+        connections = []
+        def get_conn():
+            connections.append(self.pool.get_connection())
+
+        t1 = threading.Thread(target=get_conn)
+        t2 = threading.Thread(target=get_conn)
+        t1.start(); t2.start()
+        t1.join(); t2.join()
+        self.assertEqual(len(connections), 2)
+        self.assertIsNot(connections[0], connections[1])
+
+    def test_wal_mode_applied(self):
+        conn = self.pool.get_connection()
+        result = conn.execute("PRAGMA journal_mode").fetchone()
+        self.assertEqual(result[0], "wal")
+
+    def test_foreign_keys_enabled(self):
+        conn = self.pool.get_connection()
+        result = conn.execute("PRAGMA foreign_keys").fetchone()
+        self.assertEqual(result[0], 1)
+
+    def test_health_check_passes(self):
+        self.assertTrue(self.pool.check_health())
+
+    def test_health_check_missing_file(self):
+        pool = DatabaseConnectionPool("/nonexistent/path.db")
+        self.assertFalse(pool.check_health())
+
+    def test_get_stats(self):
+        self.pool.get_connection()
+        stats = self.pool.get_stats()
+        self.assertGreater(stats["total_connections_created"], 0)
+        self.assertTrue(stats["db_exists"])
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+
+class TestAtomicTransaction(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.db = os.path.join(self.tmpdir, "atomic.db")
+        _make_db(self.db)
+        # isolation_level=None for manual transaction control
+        self.conn = sqlite3.connect(self.db, isolation_level=None)
+
+    def tearDown(self):
+        self.conn.close()
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_commits_on_success(self):
+        with atomic_transaction(self.conn) as c:
+            c.execute("INSERT INTO t VALUES (1, 'hello')")
+        row = self.conn.execute("SELECT val FROM t WHERE id=1").fetchone()
+        self.assertEqual(row[0], "hello")
+
+    def test_rolls_back_on_exception(self):
+        try:
+            with atomic_transaction(self.conn) as c:
+                c.execute("INSERT INTO t VALUES (2, 'rollback_test')")
+                raise ValueError("intentional")
+        except ValueError:
+            pass
+        row = self.conn.execute("SELECT val FROM t WHERE id=2").fetchone()
+        self.assertIsNone(row)
+
+    def test_multiple_operations_atomic(self):
+        with atomic_transaction(self.conn) as c:
+            c.execute("INSERT INTO t VALUES (3, 'a')")
+            c.execute("INSERT INTO t VALUES (4, 'b')")
+        count = self.conn.execute("SELECT COUNT(*) FROM t WHERE id IN (3,4)").fetchone()[0]
+        self.assertEqual(count, 2)
+
+    def test_partial_failure_rolls_back_all(self):
+        try:
+            with atomic_transaction(self.conn) as c:
+                c.execute("INSERT INTO t VALUES (5, 'ok')")
+                c.execute("INSERT INTO t VALUES (5, 'dup')")  # duplicate PK
+        except Exception:
+            pass
+        row = self.conn.execute("SELECT * FROM t WHERE id=5").fetchone()
+        self.assertIsNone(row)
+
+    def test_raises_transaction_error_on_non_retryable(self):
+        """Non-busy OperationalError should propagate as TransactionError."""
+        bad_conn = sqlite3.connect(":memory:", isolation_level=None)
+        bad_conn.execute("CREATE TABLE x (id INTEGER PRIMARY KEY)")
+        with self.assertRaises(Exception):
+            with atomic_transaction(bad_conn) as c:
+                c.execute("INSERT INTO nonexistent VALUES (1)")
+        bad_conn.close()
+
+
+class TestInputSanitizer(unittest.TestCase):
+
+    def test_sanitize_strips_null_bytes(self):
+        result = InputSanitizer.sanitize_string("hello\x00world")
+        self.assertNotIn("\x00", result)
+
+    def test_sanitize_caps_length(self):
+        result = InputSanitizer.sanitize_string("x" * 1000, max_length=10)
+        self.assertEqual(len(result), 10)
+
+    def test_sanitize_non_string_converted(self):
+        result = InputSanitizer.sanitize_string(42)
+        self.assertEqual(result, "42")
+
+    def test_check_sql_injection_drop(self):
+        self.assertTrue(InputSanitizer.check_sql_injection("DROP TABLE users"))
+
+    def test_check_sql_injection_union(self):
+        self.assertTrue(InputSanitizer.check_sql_injection("1' UNION SELECT * FROM--"))
+
+    def test_check_sql_injection_clean(self):
+        self.assertFalse(InputSanitizer.check_sql_injection("BTC-USD"))
+
+    def test_safe_identifier_valid(self):
+        self.assertEqual(InputSanitizer.safe_identifier("orders"), "orders")
+        self.assertEqual(InputSanitizer.safe_identifier("_temp_table"), "_temp_table")
+
+    def test_safe_identifier_invalid(self):
+        with self.assertRaises(ValueError):
+            InputSanitizer.safe_identifier("orders; DROP TABLE--")
+        with self.assertRaises(ValueError):
+            InputSanitizer.safe_identifier("1invalid")
+
+    def test_sanitize_record(self):
+        record = {"symbol": "BTC-USD", "note": "hello\x00"}
+        result = InputSanitizer.sanitize_record(record)
+        self.assertNotIn("\x00", result["note"])
+        self.assertEqual(result["symbol"], "BTC-USD")
+
+    def test_sanitize_record_clears_injection(self):
+        record = {"name": "'; DROP TABLE orders; --"}
+        result = InputSanitizer.sanitize_record(record)
+        self.assertEqual(result["name"], "")
+
+
+class TestDatabaseHealthMonitor(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.db = os.path.join(self.tmpdir, "health.db")
+        _make_db(self.db)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_check_now_healthy(self):
+        monitor = DatabaseHealthMonitor(self.db)
+        self.assertTrue(monitor.check_now())
+
+    def test_check_now_missing_file(self):
+        monitor = DatabaseHealthMonitor("/nonexistent/path.db")
+        self.assertFalse(monitor.check_now())
+
+    def test_start_stop(self):
+        monitor = DatabaseHealthMonitor(self.db, check_interval=60)
+        monitor.start()
+        self.assertTrue(monitor._thread.is_alive())
+        monitor.stop()
+        self.assertFalse(monitor._thread.is_alive())
+
+    def test_get_status(self):
+        monitor = DatabaseHealthMonitor(self.db)
+        monitor.check_now()
+        status = monitor.get_status()
+        self.assertTrue(status["last_check_ok"])
+        self.assertEqual(status["db_path"], self.db)
+
+    def test_on_corrupt_callback_not_fired_for_healthy_db(self):
+        cb = unittest.mock.MagicMock()
+        monitor = DatabaseHealthMonitor(self.db, on_corrupt=cb)
+        monitor.check_now()
+        cb.assert_not_called()
+
+
+if __name__ == "__main__":
+    import unittest.mock
+    unittest.main()
