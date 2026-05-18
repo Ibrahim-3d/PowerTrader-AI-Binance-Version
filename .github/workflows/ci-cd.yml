@@ -31,7 +31,7 @@ jobs:
       run: bandit -r app/ -f json -o bandit-report.json || true
 
     - name: Upload security reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: security-reports
         path: |
@@ -65,7 +65,7 @@ jobs:
       run: pylint app/ --output-format=json > pylint-report.json || true
 
     - name: Upload code quality reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: code-quality-reports
         path: pylint-report.json
