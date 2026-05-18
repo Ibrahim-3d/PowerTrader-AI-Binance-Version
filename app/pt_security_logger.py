@@ -31,7 +31,7 @@ import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generator, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -40,24 +40,25 @@ logger = logging.getLogger(__name__)
 # Security event types
 # ---------------------------------------------------------------------------
 class SecurityEventType(Enum):
-    AUTH_ATTEMPT = "auth_attempt"           # API key authentication attempt
-    AUTH_SUCCESS = "auth_success"           # Successful authentication
-    AUTH_FAILURE = "auth_failure"           # Failed authentication
-    CREDENTIAL_USE = "credential_use"       # Credential accessed/used
+    AUTH_ATTEMPT = "auth_attempt"  # API key authentication attempt
+    AUTH_SUCCESS = "auth_success"  # Successful authentication
+    AUTH_FAILURE = "auth_failure"  # Failed authentication
+    CREDENTIAL_USE = "credential_use"  # Credential accessed/used
     CREDENTIAL_ROTATION = "credential_rotation"  # Credential rotated
     SUSPICIOUS_ACTIVITY = "suspicious_activity"  # Anomalous behavior detected
-    PERMISSION_DENIED = "permission_denied" # Insufficient API permissions
-    RATE_LIMIT = "rate_limit"               # Rate limit hit
-    TRADE_EXECUTED = "trade_executed"       # Order placed
-    TRADE_REJECTED = "trade_rejected"       # Order rejected
-    CONFIG_CHANGE = "config_change"         # Configuration modified
-    SYSTEM_START = "system_start"           # Application started
-    SYSTEM_STOP = "system_stop"             # Application stopped
+    PERMISSION_DENIED = "permission_denied"  # Insufficient API permissions
+    RATE_LIMIT = "rate_limit"  # Rate limit hit
+    TRADE_EXECUTED = "trade_executed"  # Order placed
+    TRADE_REJECTED = "trade_rejected"  # Order rejected
+    CONFIG_CHANGE = "config_change"  # Configuration modified
+    SYSTEM_START = "system_start"  # Application started
+    SYSTEM_STOP = "system_stop"  # Application stopped
 
 
 @dataclass
 class SecurityEvent:
     """Structured security event for audit trail."""
+
     event_id: str
     event_type: str
     timestamp: float
@@ -154,8 +155,8 @@ class SecurityLogger:
     """
 
     AUDIT_LOG_FILENAME = "security_audit.jsonl"
-    MAX_BYTES = 10 * 1024 * 1024    # 10 MB per file
-    BACKUP_COUNT = 10               # Keep 10 rotated files
+    MAX_BYTES = 10 * 1024 * 1024  # 10 MB per file
+    BACKUP_COUNT = 10  # Keep 10 rotated files
 
     def __init__(self, log_dir: Optional[str] = None):
         self._log_dir = log_dir or os.path.dirname(os.path.abspath(__file__))
@@ -167,6 +168,7 @@ class SecurityLogger:
     def _setup_audit_logger(self) -> logging.Logger:
         """Configure dedicated audit logger with rotation and secure permissions."""
         import hashlib
+
         path_hash = hashlib.md5(self._audit_path.encode()).hexdigest()[:8]
         audit_logger = logging.getLogger(f"pt.security.audit.{path_hash}")
         audit_logger.setLevel(logging.DEBUG)
@@ -239,13 +241,23 @@ class SecurityLogger:
         details: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Log an API authentication attempt (success or failure)."""
-        event_type = SecurityEventType.AUTH_SUCCESS if success else SecurityEventType.AUTH_FAILURE
+        event_type = (
+            SecurityEventType.AUTH_SUCCESS
+            if success
+            else SecurityEventType.AUTH_FAILURE
+        )
         msg = f"API auth {'succeeded' if success else 'FAILED'} for {api_name}"
         if not success:
             logger.warning("SECURITY: %s", msg)
-        event = self._make_event(event_type, msg, source=api_name,
-                                 success=success, details=details,
-                                 source_ip=source_ip, user_id=user_id)
+        event = self._make_event(
+            event_type,
+            msg,
+            source=api_name,
+            success=success,
+            details=details,
+            source_ip=source_ip,
+            user_id=user_id,
+        )
         self._emit(event)
 
     def log_credential_use(
@@ -257,8 +269,10 @@ class SecurityLogger:
         """Log that credentials were accessed/used for an operation."""
         msg = f"Credential used: {api_name} for {operation}"
         event = self._make_event(
-            SecurityEventType.CREDENTIAL_USE, msg,
-            source=api_name, success=True,
+            SecurityEventType.CREDENTIAL_USE,
+            msg,
+            source=api_name,
+            success=True,
             details={**(details or {}), "operation": operation},
         )
         self._emit(event)
@@ -270,12 +284,17 @@ class SecurityLogger:
         details: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Log a credential rotation event."""
-        msg = f"Credential rotation {'succeeded' if success else 'FAILED'} for {api_name}"
+        msg = (
+            f"Credential rotation {'succeeded' if success else 'FAILED'} for {api_name}"
+        )
         if not success:
             logger.critical("SECURITY: %s", msg)
         event = self._make_event(
-            SecurityEventType.CREDENTIAL_ROTATION, msg,
-            source=api_name, success=success, details=details,
+            SecurityEventType.CREDENTIAL_ROTATION,
+            msg,
+            source=api_name,
+            success=success,
+            details=details,
         )
         self._emit(event)
 
@@ -290,9 +309,13 @@ class SecurityLogger:
         msg = f"Suspicious activity detected: {activity_type}"
         logger.warning("SECURITY ALERT: %s", msg)
         event = self._make_event(
-            SecurityEventType.SUSPICIOUS_ACTIVITY, msg,
-            source=activity_type, success=False,
-            source_ip=source_ip, user_id=user_id, details=details,
+            SecurityEventType.SUSPICIOUS_ACTIVITY,
+            msg,
+            source=activity_type,
+            success=False,
+            source_ip=source_ip,
+            user_id=user_id,
+            details=details,
         )
         self._emit(event)
 
@@ -306,8 +329,10 @@ class SecurityLogger:
         msg = f"Permission denied: {required_permission} on {api_name}"
         logger.error("SECURITY: %s", msg)
         event = self._make_event(
-            SecurityEventType.PERMISSION_DENIED, msg,
-            source=api_name, success=False,
+            SecurityEventType.PERMISSION_DENIED,
+            msg,
+            source=api_name,
+            success=False,
             details={**(details or {}), "required_permission": required_permission},
         )
         self._emit(event)
@@ -323,20 +348,31 @@ class SecurityLogger:
         details: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Log a trade execution event to the audit trail."""
-        event_type = SecurityEventType.TRADE_EXECUTED if success else SecurityEventType.TRADE_REJECTED
+        event_type = (
+            SecurityEventType.TRADE_EXECUTED
+            if success
+            else SecurityEventType.TRADE_REJECTED
+        )
         msg = f"Trade {'executed' if success else 'REJECTED'}: {side} {quantity} {symbol} @ {price}"
         event = self._make_event(
-            event_type, msg, success=success,
+            event_type,
+            msg,
+            success=success,
             details={
-                "symbol": symbol, "side": side,
-                "quantity": quantity, "price": price,
-                "order_id": order_id, **(details or {}),
+                "symbol": symbol,
+                "side": side,
+                "quantity": quantity,
+                "price": price,
+                "order_id": order_id,
+                **(details or {}),
             },
         )
         self._emit(event)
 
     def log_system_event(
-        self, event_type: SecurityEventType, message: str,
+        self,
+        event_type: SecurityEventType,
+        message: str,
         details: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Log a system lifecycle event (start, stop, config change)."""

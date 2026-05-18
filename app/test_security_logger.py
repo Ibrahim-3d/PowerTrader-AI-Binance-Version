@@ -8,7 +8,6 @@ import time
 import unittest
 
 from pt_security_logger import (
-    CorrelationLogFilter,
     SecurityEvent,
     SecurityEventType,
     SecurityLogger,
@@ -20,7 +19,6 @@ from pt_security_logger import (
 
 
 class TestCorrelationID(unittest.TestCase):
-
     def tearDown(self):
         clear_correlation_id()
 
@@ -65,14 +63,15 @@ class TestCorrelationID(unittest.TestCase):
 
         t1 = threading.Thread(target=worker, args=("t1", "cid-thread-1"))
         t2 = threading.Thread(target=worker, args=("t2", "cid-thread-2"))
-        t1.start(); t2.start()
-        t1.join(); t2.join()
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
         self.assertEqual(results["t1"], "cid-thread-1")
         self.assertEqual(results["t2"], "cid-thread-2")
 
 
 class TestSecurityEvent(unittest.TestCase):
-
     def test_new_id_format(self):
         eid = SecurityEvent.new_id()
         self.assertTrue(eid.startswith("SEC_"))
@@ -105,7 +104,6 @@ class TestSecurityEvent(unittest.TestCase):
 
 
 class TestSecurityLogger(unittest.TestCase):
-
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
         self.sec_logger = SecurityLogger(log_dir=self.tmpdir)
@@ -113,6 +111,7 @@ class TestSecurityLogger(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         clear_correlation_id()
         # Close handlers to release file locks (Windows)
         for handler in self.sec_logger._logger.handlers[:]:
@@ -139,39 +138,54 @@ class TestSecurityLogger(unittest.TestCase):
     def test_log_credential_use(self):
         self.sec_logger.log_credential_use("robinhood", "place_order")
         events = self._get_events()
-        self.assertEqual(events[0]["event_type"], SecurityEventType.CREDENTIAL_USE.value)
+        self.assertEqual(
+            events[0]["event_type"], SecurityEventType.CREDENTIAL_USE.value
+        )
         self.assertEqual(events[0]["details"]["operation"], "place_order")
 
     def test_log_credential_rotation(self):
         self.sec_logger.log_credential_rotation("robinhood", success=True)
         events = self._get_events()
-        self.assertEqual(events[0]["event_type"], SecurityEventType.CREDENTIAL_ROTATION.value)
+        self.assertEqual(
+            events[0]["event_type"], SecurityEventType.CREDENTIAL_ROTATION.value
+        )
 
     def test_log_suspicious_activity(self):
         self.sec_logger.log_suspicious_activity(
-            "rate_limit_exceeded", source_ip="1.2.3.4",
-            details={"endpoint": "/orders", "count": 100}
+            "rate_limit_exceeded",
+            source_ip="1.2.3.4",
+            details={"endpoint": "/orders", "count": 100},
         )
         events = self._get_events()
-        self.assertEqual(events[0]["event_type"], SecurityEventType.SUSPICIOUS_ACTIVITY.value)
+        self.assertEqual(
+            events[0]["event_type"], SecurityEventType.SUSPICIOUS_ACTIVITY.value
+        )
         self.assertEqual(events[0]["source_ip"], "1.2.3.4")
 
     def test_log_permission_denied(self):
         self.sec_logger.log_permission_denied("robinhood", "sell")
         events = self._get_events()
-        self.assertEqual(events[0]["event_type"], SecurityEventType.PERMISSION_DENIED.value)
+        self.assertEqual(
+            events[0]["event_type"], SecurityEventType.PERMISSION_DENIED.value
+        )
         self.assertEqual(events[0]["details"]["required_permission"], "sell")
 
     def test_log_trade_event_success(self):
-        self.sec_logger.log_trade_event("BTC-USD", "buy", 0.1, 45000.0, order_id="ord-001")
+        self.sec_logger.log_trade_event(
+            "BTC-USD", "buy", 0.1, 45000.0, order_id="ord-001"
+        )
         events = self._get_events()
-        self.assertEqual(events[0]["event_type"], SecurityEventType.TRADE_EXECUTED.value)
+        self.assertEqual(
+            events[0]["event_type"], SecurityEventType.TRADE_EXECUTED.value
+        )
         self.assertEqual(events[0]["details"]["symbol"], "BTC-USD")
 
     def test_log_trade_event_rejected(self):
         self.sec_logger.log_trade_event("ETH-USD", "sell", 1.0, 3000.0, success=False)
         events = self._get_events()
-        self.assertEqual(events[0]["event_type"], SecurityEventType.TRADE_REJECTED.value)
+        self.assertEqual(
+            events[0]["event_type"], SecurityEventType.TRADE_REJECTED.value
+        )
 
     def test_correlation_id_captured_in_event(self):
         with correlation_context("trade-workflow-xyz"):
@@ -203,8 +217,10 @@ class TestSecurityLogger(unittest.TestCase):
         tmpdir2 = tempfile.mkdtemp()
         sl = SecurityLogger(log_dir=tmpdir2)
         for h in sl._logger.handlers[:]:
-            h.close(); sl._logger.removeHandler(h)
+            h.close()
+            sl._logger.removeHandler(h)
         import shutil
+
         shutil.rmtree(tmpdir2, ignore_errors=True)
 
     def test_get_recent_events_limit(self):
