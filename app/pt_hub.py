@@ -7485,6 +7485,16 @@ Platform: {sys.platform}
             return key_path, secret_path
 
         def _read_api_files() -> Tuple[str, str]:
+            # Try encrypted vault first, then fall back to plaintext
+            from pt_credentials import SecureCredentialManager as _SCM
+            _mgr = _SCM(self.project_dir)
+            try:
+                creds = _mgr.decrypt_credentials()
+                if creds:
+                    return creds[0], creds[1]
+            except Exception:
+                pass
+            # Plaintext fallback for legacy / migration path
             key_path, secret_path = _api_paths()
             try:
                 with open(key_path, "r", encoding="utf-8") as f:
@@ -8154,13 +8164,18 @@ Platform: {sys.platform}
                     pass
 
                 try:
-                    # Use atomic writes to prevent corruption during concurrent access
-                    _atomic_write_text(key_path, api_key)
-                    _atomic_write_text(secret_path, priv_b64)
+                    # Encrypt credentials via SecureCredentialManager
+                    # (replaces plaintext r_key.txt / r_secret.txt writes)
+                    from pt_credentials import SecureCredentialManager as _SCM
+                    _mgr = _SCM(self.project_dir)
+                    if not _mgr.encrypt_credentials(api_key, priv_b64):
+                        raise RuntimeError(
+                            "Encryption failed - check disk space and permissions."
+                        )
                 except Exception as e:
                     messagebox.showerror(
                         "Save failed",
-                        f"Couldn't write the credential files.\n\nError:\n{e}",
+                        f"Couldn't save credentials.\n\nError:\n{e}",
                     )
                     return
 
