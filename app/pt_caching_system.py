@@ -69,7 +69,7 @@ class CacheStats:
         self.expired_entries = 0
         self.memory_usage_bytes = 0
         self.total_entries = 0
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
     
     def record_hit(self):
         """Record a cache hit."""
