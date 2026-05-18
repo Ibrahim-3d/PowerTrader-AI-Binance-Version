@@ -73,6 +73,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     name: Unit Tests
+    timeout-minutes: 15
     strategy:
       matrix:
         python-version: ['3.11', '3.12']
