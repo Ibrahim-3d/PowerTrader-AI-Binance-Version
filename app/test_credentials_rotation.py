@@ -11,16 +11,12 @@ from unittest.mock import MagicMock
 from pt_credentials import (
     CredentialMetadata,
     CredentialRotationScheduler,
-    PermissionAuditResult,
     PermissionValidator,
     SecureCredentialManager,
-    get_credentials,
-    validate_credentials_on_startup,
 )
 
 
 class TestCredentialMetadata(unittest.TestCase):
-
     def test_new_sets_rotation_due_future(self):
         meta = CredentialMetadata.new(90)
         self.assertFalse(meta.is_rotation_due())
@@ -53,7 +49,6 @@ class TestCredentialMetadata(unittest.TestCase):
 
 
 class TestSecureCredentialManager(unittest.TestCase):
-
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
         self.mgr = SecureCredentialManager(self.tmpdir)
@@ -115,7 +110,6 @@ class TestSecureCredentialManager(unittest.TestCase):
     def test_rotate_restores_metadata_on_failure(self):
         """Rotation rollback must restore metadata alongside ciphertext files."""
         self.mgr.encrypt_credentials("OLD_KEY", "OLD_SECRET", rotation_interval_days=90)
-        meta_before = self.mgr._load_metadata()
 
         # Corrupt the manager to force failure during encrypt
         original = self.mgr._atomic_write_binary
@@ -179,7 +173,6 @@ class TestSecureCredentialManager(unittest.TestCase):
 
 
 class TestPermissionValidator(unittest.TestCase):
-
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
         self.validator = PermissionValidator(self.tmpdir)
@@ -220,6 +213,7 @@ class TestPermissionValidator(unittest.TestCase):
     def test_fetcher_exception_handled(self):
         def fetcher():
             raise ConnectionError("API unreachable")
+
         result = self.validator.validate(fetcher)
         self.assertFalse(result.audit_passed)
         self.assertIn("failed", result.message.lower())
@@ -241,10 +235,18 @@ class TestPermissionValidator(unittest.TestCase):
         """Log should not grow past MAX_AUDIT_LINES."""
         # Write many entries manually to reach cap
         log_path = os.path.join(self.tmpdir, PermissionValidator.AUDIT_LOG_FILE)
-        entry = json.dumps({"audit_passed": False, "timestamp": 0,
-                            "has_required": False, "has_trading": False,
-                            "granted_permissions": [], "missing_required": [],
-                            "missing_trading": [], "message": "x"})
+        entry = json.dumps(
+            {
+                "audit_passed": False,
+                "timestamp": 0,
+                "has_required": False,
+                "has_trading": False,
+                "granted_permissions": [],
+                "missing_required": [],
+                "missing_trading": [],
+                "message": "x",
+            }
+        )
         with open(log_path, "w") as f:
             for _ in range(PermissionValidator.MAX_AUDIT_LINES + 5):
                 f.write(entry + "\n")
@@ -256,7 +258,6 @@ class TestPermissionValidator(unittest.TestCase):
 
 
 class TestCredentialRotationScheduler(unittest.TestCase):
-
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
 
@@ -275,7 +276,9 @@ class TestCredentialRotationScheduler(unittest.TestCase):
 
     def test_no_callback_without_metadata(self):
         cb = MagicMock()
-        sched = CredentialRotationScheduler(cb, check_interval_hours=24, base_dir=self.tmpdir)
+        sched = CredentialRotationScheduler(
+            cb, check_interval_hours=24, base_dir=self.tmpdir
+        )
         result = sched.check_now()
         self.assertIsNone(result)
         cb.assert_not_called()
@@ -292,7 +295,9 @@ class TestCredentialRotationScheduler(unittest.TestCase):
         )
         mgr._save_metadata(meta)
 
-        sched = CredentialRotationScheduler(cb, check_interval_hours=24, base_dir=self.tmpdir)
+        sched = CredentialRotationScheduler(
+            cb, check_interval_hours=24, base_dir=self.tmpdir
+        )
         # Direct check_now proves warning is returned
         warning = sched.check_now()
         self.assertIsNotNone(warning)
@@ -308,7 +313,9 @@ class TestCredentialRotationScheduler(unittest.TestCase):
             rotation_due_at=time.time() - 1,
         )
         mgr._save_metadata(meta)
-        sched = CredentialRotationScheduler(cb, check_interval_hours=24, base_dir=self.tmpdir)
+        sched = CredentialRotationScheduler(
+            cb, check_interval_hours=24, base_dir=self.tmpdir
+        )
 
         # Simulate two consecutive scheduler ticks manually
         warning1 = sched._manager.check_rotation_warning()

@@ -39,6 +39,7 @@ TRADING_PERMISSIONS: Set[str] = {"buy", "sell"}
 @dataclass
 class CredentialMetadata:
     """Metadata stored alongside encrypted credentials."""
+
     created_at: float
     last_rotated_at: float
     rotation_due_at: float
@@ -71,6 +72,7 @@ class CredentialMetadata:
 @dataclass
 class PermissionAuditResult:
     """Result of an API permission validation check."""
+
     timestamp: float
     has_required: bool
     has_trading: bool
@@ -181,7 +183,9 @@ class SecureCredentialManager:
             return None
 
     def _save_metadata(self, meta: CredentialMetadata) -> None:
-        self._atomic_write_text(self.metadata_file, json.dumps(meta.to_dict(), indent=2))
+        self._atomic_write_text(
+            self.metadata_file, json.dumps(meta.to_dict(), indent=2)
+        )
 
     # ------------------------------------------------------------------
     # Core encrypt / decrypt
@@ -219,7 +223,9 @@ class SecureCredentialManager:
                 if existing:
                     existing.last_rotated_at = now
                     existing.rotation_due_at = now + rotation_interval_days * 86400
-                    existing.rotation_interval_days = rotation_interval_days  # keep consistent
+                    existing.rotation_interval_days = (
+                        rotation_interval_days  # keep consistent
+                    )
                     meta = existing
                 else:
                     meta = CredentialMetadata.new(rotation_interval_days)
@@ -294,7 +300,9 @@ class SecureCredentialManager:
                         shutil.copy2(self.metadata_file, backup_meta)
                     backed_up = True
 
-                if self.encrypt_credentials(new_api_key, new_private_key_b64, rotation_interval_days):
+                if self.encrypt_credentials(
+                    new_api_key, new_private_key_b64, rotation_interval_days
+                ):
                     for f in (backup_key, backup_secret, backup_meta):
                         try:
                             os.remove(f)
@@ -371,7 +379,11 @@ class SecureCredentialManager:
     def has_encrypted_credentials(self) -> bool:
         return all(
             os.path.exists(p)
-            for p in (self.encrypted_key_file, self.encrypted_secret_file, self.salt_file)
+            for p in (
+                self.encrypted_key_file,
+                self.encrypted_secret_file,
+                self.salt_file,
+            )
         )
 
     def has_plaintext_credentials(self) -> bool:
@@ -485,7 +497,7 @@ class PermissionValidator:
                 with open(self._audit_log, "r", encoding="utf-8") as f:
                     lines = f.readlines()
                 if len(lines) >= self.MAX_AUDIT_LINES:
-                    keep = lines[-(self.MAX_AUDIT_LINES - 1):]
+                    keep = lines[-(self.MAX_AUDIT_LINES - 1) :]
                     with open(self._audit_log, "w", encoding="utf-8") as f:
                         f.writelines(keep)
 
@@ -608,9 +620,13 @@ def get_credentials() -> Optional[Tuple[str, str]]:
             )
             try:
                 base_dir = os.path.dirname(os.path.abspath(__file__))
-                with open(os.path.join(base_dir, "r_key.txt"), "r", encoding="utf-8") as f:
+                with open(
+                    os.path.join(base_dir, "r_key.txt"), "r", encoding="utf-8"
+                ) as f:
                     api_key = f.read().strip()
-                with open(os.path.join(base_dir, "r_secret.txt"), "r", encoding="utf-8") as f:
+                with open(
+                    os.path.join(base_dir, "r_secret.txt"), "r", encoding="utf-8"
+                ) as f:
                     private_key = f.read().strip()
                 return api_key, private_key
             except OSError:
