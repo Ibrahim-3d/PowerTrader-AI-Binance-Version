@@ -37,11 +37,14 @@ INTEGRITY_CHECK_INTERVAL = 3600
 class DatabaseError(Exception):
     """Base database error."""
 
+
 class TransactionError(DatabaseError):
     """Raised when a transaction cannot complete after retries."""
 
+
 class DatabaseCorruptionError(DatabaseError):
     """Raised when integrity_check detects database corruption."""
+
 
 class DBConnectionError(DatabaseError):
     """Raised when a database connection cannot be established."""
@@ -68,7 +71,7 @@ class DatabaseConnectionPool:
         self.db_path = os.path.abspath(db_path)
         self.busy_timeout_ms = busy_timeout_ms
         self._local = threading.local()
-        self._create_lock = threading.Lock()   # Serializes connection creation
+        self._create_lock = threading.Lock()  # Serializes connection creation
         self._stats_lock = threading.Lock()
         self._connection_count = 0
         self._health_failures = 0
@@ -91,17 +94,22 @@ class DatabaseConnectionPool:
                     self.db_path,
                     timeout=self.busy_timeout_ms / 1000,
                     check_same_thread=False,
-                    isolation_level=None,   # Manual transaction control
+                    isolation_level=None,  # Manual transaction control
                 )
                 conn.row_factory = sqlite3.Row
                 self._apply_pragmas(conn)
                 with self._stats_lock:
                     self._connection_count += 1
-                logger.debug("New DB connection #%d for thread %s",
-                             self._connection_count, threading.current_thread().name)
+                logger.debug(
+                    "New DB connection #%d for thread %s",
+                    self._connection_count,
+                    threading.current_thread().name,
+                )
                 return conn
             except sqlite3.Error as exc:
-                raise DBConnectionError(f"Cannot connect to {self.db_path}: {exc}") from exc
+                raise DBConnectionError(
+                    f"Cannot connect to {self.db_path}: {exc}"
+                ) from exc
 
     def _apply_pragmas(self, conn: sqlite3.Connection) -> None:
         """Apply performance and safety PRAGMAs."""
@@ -205,13 +213,17 @@ def atomic_transaction(
 
         except sqlite3.OperationalError as exc:
             err_lower = str(exc).lower()
-            is_contention = any(w in err_lower for w in ("busy", "locked", "cannot start"))
+            is_contention = any(
+                w in err_lower for w in ("busy", "locked", "cannot start")
+            )
             if not is_contention:
                 # Non-contention OperationalError (e.g. constraint violation, syntax error)
                 # — propagate original exception unchanged; do not wrap as TransactionError.
                 raise
             if attempt >= max_retries:
-                logger.error("Transaction failed after %d attempt(s): %s", attempt + 1, exc)
+                logger.error(
+                    "Transaction failed after %d attempt(s): %s", attempt + 1, exc
+                )
                 raise TransactionError(
                     f"Transaction failed after {attempt + 1} attempt(s): {exc}"
                 ) from exc
@@ -220,7 +232,10 @@ def atomic_transaction(
             actual_delay = min(delay, MAX_RETRY_DELAY)
             logger.warning(
                 "DB contention (attempt %d/%d), retrying in %.2fs: %s",
-                attempt, max_retries, actual_delay, exc,
+                attempt,
+                max_retries,
+                actual_delay,
+                exc,
             )
             time.sleep(actual_delay)
             delay *= 2
@@ -235,10 +250,23 @@ class InputSanitizer:
     Always prefer parameterized queries; use this as an additional defense layer.
     """
 
-    _SQL_KEYWORDS = frozenset([
-        "drop", "delete", "truncate", "insert", "update", "alter",
-        "create", "exec", "execute", "union", "select", "--", ";",
-    ])
+    _SQL_KEYWORDS = frozenset(
+        [
+            "drop",
+            "delete",
+            "truncate",
+            "insert",
+            "update",
+            "alter",
+            "create",
+            "exec",
+            "execute",
+            "union",
+            "select",
+            "--",
+            ";",
+        ]
+    )
     _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
     @staticmethod
@@ -273,7 +301,9 @@ class InputSanitizer:
             if isinstance(v, str):
                 sanitized = InputSanitizer.sanitize_string(v, max_str_length)
                 if InputSanitizer.check_sql_injection(sanitized):
-                    logger.warning("Potential SQL injection in field '%s' — value cleared", k)
+                    logger.warning(
+                        "Potential SQL injection in field '%s' — value cleared", k
+                    )
                     sanitized = ""
                 result[k] = sanitized
             else:
@@ -315,7 +345,9 @@ class DatabaseHealthMonitor:
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, name="DBHealthMonitor", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="DBHealthMonitor", daemon=True
+        )
         self._thread.start()
         logger.info("DB health monitor started (interval: %ss)", self._interval)
 
@@ -331,7 +363,9 @@ class DatabaseHealthMonitor:
                 healthy = self._pool.check_health()
                 self._last_check_ok = healthy
                 if not healthy and self._on_corrupt:
-                    logger.critical("DB corruption detected — firing on_corrupt callback")
+                    logger.critical(
+                        "DB corruption detected — firing on_corrupt callback"
+                    )
                     self._on_corrupt()
             except Exception as exc:
                 logger.error("DB health monitor error: %s", exc)

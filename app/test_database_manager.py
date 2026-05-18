@@ -5,13 +5,11 @@ import shutil
 import sqlite3
 import tempfile
 import threading
-import time
 import unittest
 from unittest.mock import MagicMock
 
 from pt_database_manager import (
     DatabaseConnectionPool,
-    DatabaseCorruptionError,
     DatabaseHealthMonitor,
     InputSanitizer,
     TransactionError,
@@ -27,7 +25,6 @@ def _make_db(path: str) -> None:
 
 
 class TestDatabaseConnectionPool(unittest.TestCase):
-
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
         self.db = os.path.join(self.tmpdir, "test.db")
@@ -64,8 +61,10 @@ class TestDatabaseConnectionPool(unittest.TestCase):
 
         t1 = threading.Thread(target=get_conn)
         t2 = threading.Thread(target=get_conn)
-        t1.start(); t2.start()
-        t1.join(); t2.join()
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
 
         self.assertEqual(errors, [], f"Thread errors: {errors}")
         self.assertEqual(len(connections), 2)
@@ -96,7 +95,6 @@ class TestDatabaseConnectionPool(unittest.TestCase):
 
 
 class TestAtomicTransaction(unittest.TestCase):
-
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
         self.db = os.path.join(self.tmpdir, "atomic.db")
@@ -127,14 +125,18 @@ class TestAtomicTransaction(unittest.TestCase):
         with atomic_transaction(self.conn) as c:
             c.execute("INSERT INTO t VALUES (3, 'a')")
             c.execute("INSERT INTO t VALUES (4, 'b')")
-        count = self.conn.execute("SELECT COUNT(*) FROM t WHERE id IN (3,4)").fetchone()[0]
+        count = self.conn.execute(
+            "SELECT COUNT(*) FROM t WHERE id IN (3,4)"
+        ).fetchone()[0]
         self.assertEqual(count, 2)
 
     def test_partial_failure_rolls_back_all(self):
         try:
             with atomic_transaction(self.conn) as c:
                 c.execute("INSERT INTO t VALUES (5, 'ok')")
-                c.execute("INSERT INTO t VALUES (5, 'dup')")  # duplicate PK → OperationalError
+                c.execute(
+                    "INSERT INTO t VALUES (5, 'dup')"
+                )  # duplicate PK → OperationalError
         except Exception:
             pass
         row = self.conn.execute("SELECT * FROM t WHERE id=5").fetchone()
@@ -161,7 +163,8 @@ class TestAtomicTransaction(unittest.TestCase):
             with self.assertRaises(TransactionError):
                 with atomic_transaction(
                     sqlite3.connect(self.db, timeout=0.01, isolation_level=None),
-                    max_retries=1, base_delay=0.01,
+                    max_retries=1,
+                    base_delay=0.01,
                 ) as c:
                     c.execute("INSERT INTO t VALUES (99, 'blocked')")
         finally:
@@ -170,12 +173,13 @@ class TestAtomicTransaction(unittest.TestCase):
 
 
 class TestInputSanitizer(unittest.TestCase):
-
     def test_sanitize_strips_null_bytes(self):
         self.assertNotIn("\x00", InputSanitizer.sanitize_string("hello\x00world"))
 
     def test_sanitize_caps_length(self):
-        self.assertEqual(len(InputSanitizer.sanitize_string("x" * 1000, max_length=10)), 10)
+        self.assertEqual(
+            len(InputSanitizer.sanitize_string("x" * 1000, max_length=10)), 10
+        )
 
     def test_sanitize_non_string_converted(self):
         self.assertEqual(InputSanitizer.sanitize_string(42), "42")
@@ -200,7 +204,9 @@ class TestInputSanitizer(unittest.TestCase):
             InputSanitizer.safe_identifier("1invalid")
 
     def test_sanitize_record(self):
-        result = InputSanitizer.sanitize_record({"symbol": "BTC-USD", "note": "hello\x00"})
+        result = InputSanitizer.sanitize_record(
+            {"symbol": "BTC-USD", "note": "hello\x00"}
+        )
         self.assertNotIn("\x00", result["note"])
         self.assertEqual(result["symbol"], "BTC-USD")
 
@@ -210,7 +216,6 @@ class TestInputSanitizer(unittest.TestCase):
 
 
 class TestDatabaseHealthMonitor(unittest.TestCase):
-
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
         self.db = os.path.join(self.tmpdir, "health.db")
