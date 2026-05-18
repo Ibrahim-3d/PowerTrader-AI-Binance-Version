@@ -99,8 +99,7 @@ class PortfolioAnalytics:
             cursor = conn.cursor()
 
             # Portfolio snapshots table
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS portfolio_snapshots (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT NOT NULL,
@@ -112,12 +111,10 @@ class PortfolioAnalytics:
                     quantities_json TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """
-            )
+            """)
 
             # Performance metrics table
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS performance_metrics (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     date TEXT NOT NULL,
@@ -127,12 +124,10 @@ class PortfolioAnalytics:
                     benchmark_return REAL DEFAULT 0.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """
-            )
+            """)
 
             # Risk metrics table
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS risk_metrics (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     calculation_date TEXT NOT NULL,
@@ -145,8 +140,7 @@ class PortfolioAnalytics:
                     correlation_matrix_json TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """
-            )
+            """)
 
             conn.commit()
 
@@ -208,16 +202,12 @@ class PortfolioAnalytics:
                 cursor = conn.cursor()
 
                 # Get historical snapshots
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT timestamp, total_value, total_cost
                     FROM portfolio_snapshots
                     WHERE datetime(timestamp) >= datetime('now', '-{} days')
                     ORDER BY timestamp
-                """.format(
-                        days
-                    )
-                )
+                """.format(days))
 
                 snapshots = cursor.fetchall()
 
@@ -305,15 +295,13 @@ class PortfolioAnalytics:
                 cursor = conn.cursor()
 
                 # Get recent snapshots for correlation analysis
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT allocations_json, total_value
                     FROM portfolio_snapshots
                     WHERE datetime(timestamp) >= datetime('now', '-30 days')
                     ORDER BY timestamp DESC
                     LIMIT 30
-                """
-                )
+                """)
 
                 snapshots = cursor.fetchall()
 
@@ -433,16 +421,12 @@ class PortfolioAnalytics:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT timestamp, allocations_json
                     FROM portfolio_snapshots
                     WHERE datetime(timestamp) >= datetime('now', '-{} days')
                     ORDER BY timestamp
-                """.format(
-                        days
-                    )
-                )
+                """.format(days))
 
                 snapshots = cursor.fetchall()
 

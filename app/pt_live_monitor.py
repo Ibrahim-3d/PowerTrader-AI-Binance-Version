@@ -521,9 +521,9 @@ class LiveMonitor:
             msg = MimeMultipart()
             msg["From"] = smtp_config["username"]
             msg["To"] = ", ".join(email_config["email_recipients"])
-            msg[
-                "Subject"
-            ] = f"PowerTraderAI+ Alert: {alert.level.upper()} - {alert.component}"
+            msg["Subject"] = (
+                f"PowerTraderAI+ Alert: {alert.level.upper()} - {alert.component}"
+            )
 
             # Email body
             body = f"""

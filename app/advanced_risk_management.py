@@ -494,8 +494,7 @@ class RiskManager:
         cursor = conn.cursor()
 
         # Risk alerts table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS risk_alerts (
                 id TEXT PRIMARY KEY,
                 alert_type TEXT NOT NULL,
@@ -510,12 +509,10 @@ class RiskManager:
                 acknowledged_at DATETIME,
                 resolved_at DATETIME
             )
-        """
-        )
+        """)
 
         # Risk metrics table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS risk_metrics (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -527,12 +524,10 @@ class RiskManager:
                 symbol TEXT,
                 timestamp DATETIME NOT NULL
             )
-        """
-        )
+        """)
 
         # Portfolio history table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS portfolio_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp DATETIME NOT NULL,
@@ -544,19 +539,16 @@ class RiskManager:
                 var_99 REAL,
                 num_positions INTEGER NOT NULL
             )
-        """
-        )
+        """)
 
         # Risk limits configuration table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS risk_limits (
                 id INTEGER PRIMARY KEY,
                 config_data TEXT NOT NULL,
                 updated_at DATETIME NOT NULL
             )
-        """
-        )
+        """)
 
         # Create indexes
         cursor.execute(

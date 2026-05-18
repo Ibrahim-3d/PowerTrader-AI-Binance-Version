@@ -405,8 +405,7 @@ class InstitutionalTradingEngine:
                 cursor = self.db_conn.cursor()
 
                 # Orders table
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS institutional_orders (
                         order_id TEXT PRIMARY KEY,
                         symbol TEXT NOT NULL,
@@ -423,12 +422,10 @@ class InstitutionalTradingEngine:
                         avg_fill_price REAL DEFAULT 0,
                         metadata TEXT
                     )
-                """
-                )
+                """)
 
                 # Performance metrics table
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS performance_metrics (
                         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         metric_name TEXT NOT NULL,
@@ -436,8 +433,7 @@ class InstitutionalTradingEngine:
                         account_id TEXT,
                         symbol TEXT
                     )
-                """
-                )
+                """)
 
                 self.db_conn.commit()
                 logger.info("Institutional trading database initialized")
@@ -646,16 +642,14 @@ class InstitutionalTradingEngine:
                         (account_id,),
                     )
                 else:
-                    cursor.execute(
-                        """
+                    cursor.execute("""
                         SELECT
                             COUNT(*) as total_orders,
                             SUM(CASE WHEN status = 'filled' THEN 1 ELSE 0 END) as filled_orders,
                             SUM(quantity * avg_fill_price) as total_volume,
                             AVG(avg_fill_price) as avg_price
                         FROM institutional_orders
-                    """
-                    )
+                    """)
 
                 result = cursor.fetchone()
 

@@ -2,6 +2,7 @@
 Exchange Configuration and Management System
 Handles multi-exchange setup, credentials, and region-based selection
 """
+
 import json
 import os
 from dataclasses import asdict, dataclass
@@ -227,7 +228,9 @@ class MultiExchangeManager:
                     success_count += 1
                     print(f"[SUCCESS] Connected to {exchange_config.exchange_type}")
                 else:
-                    print(f"[ERROR] Failed to connect to {exchange_config.exchange_type}")
+                    print(
+                        f"[ERROR] Failed to connect to {exchange_config.exchange_type}"
+                    )
 
             except Exception as e:
                 print(f"Error connecting to {exchange_config.exchange_type}: {e}")

@@ -551,8 +551,8 @@ class ResearchEngineGUI:
                 except Exception as e:
                     self.parent.after(
                         0,
-                        lambda: self.status_label.config(
-                            text=f"Model refresh failed: {str(e)}"
+                        lambda err=e: self.status_label.config(
+                            text=f"Model refresh failed: {str(err)}"
                         ),
                     )
                 finally:
@@ -688,9 +688,11 @@ class ResearchEngineGUI:
                             signal.symbol,
                             f"${market_data.get('current_price', 0):.4f}",
                             f"{market_data.get('price_change_pct_24h', 0):+.2f}%",
-                            f"{market_data.get('rsi', 0):.1f}"
-                            if market_data.get("rsi")
-                            else "N/A",
+                            (
+                                f"{market_data.get('rsi', 0):.1f}"
+                                if market_data.get("rsi")
+                                else "N/A"
+                            ),
                             signal.signal_type,
                             f"{analysis.get('market_sentiment', 0):+.2f}",
                             signal.generated_at.strftime("%H:%M:%S"),

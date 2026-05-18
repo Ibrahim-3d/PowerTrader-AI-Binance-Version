@@ -2,6 +2,7 @@
 Secure file operations for PowerTraderAI+.
 Provides secure file writing with proper permissions.
 """
+
 import json
 import os
 import stat

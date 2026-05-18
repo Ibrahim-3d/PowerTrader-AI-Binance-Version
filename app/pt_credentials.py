@@ -2,6 +2,7 @@
 Secure credential management for PowerTraderAI+.
 Handles encryption/decryption of API keys and private keys.
 """
+
 import base64
 import hashlib
 import os

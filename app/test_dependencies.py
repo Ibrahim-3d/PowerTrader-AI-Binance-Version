@@ -2,6 +2,7 @@
 """
 Quick test script to verify all PowerTrader dependencies are working
 """
+
 import os
 import sys
 

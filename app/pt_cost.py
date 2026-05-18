@@ -396,9 +396,9 @@ class CostManager:
             "break_even_return_pct": (annual_costs / performance.capital_deployed)
             * 100,
             "is_profitable": net_return > 0,
-            "efficiency_score": performance.sharpe_ratio / cost_ratio
-            if cost_ratio > 0
-            else 0,
+            "efficiency_score": (
+                performance.sharpe_ratio / cost_ratio if cost_ratio > 0 else 0
+            ),
         }
 
     def optimize_tier_selection(self, capital: float, expected_return: float) -> Dict:
@@ -427,10 +427,11 @@ class CostManager:
                 "required_return_pct": required_return * 100,
                 "expected_profit": (expected_return - required_return) * capital,
                 "feasible": expected_return > required_return,
-                "margin_of_safety": (expected_return - required_return)
-                / expected_return
-                if expected_return > 0
-                else -1,
+                "margin_of_safety": (
+                    (expected_return - required_return) / expected_return
+                    if expected_return > 0
+                    else -1
+                ),
             }
 
         # Find best tier

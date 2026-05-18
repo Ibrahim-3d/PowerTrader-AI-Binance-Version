@@ -635,9 +635,9 @@ class ResearchReportGenerator:
 
             return {
                 "total_articles": len(news_data),
-                "avg_sentiment": sum(sentiments) / len(sentiments)
-                if sentiments
-                else 0.0,
+                "avg_sentiment": (
+                    sum(sentiments) / len(sentiments) if sentiments else 0.0
+                ),
                 "sources": list(set(news.source for news in news_data)),
                 "symbols_mentioned": list(
                     set(

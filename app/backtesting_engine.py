@@ -451,21 +451,25 @@ class BacktestEngine:
 
         metrics = {
             "total_return": total_return,
-            "annualized_return": (1 + total_return) ** (252 / len(daily_returns)) - 1
-            if len(daily_returns) > 0
-            else 0,
+            "annualized_return": (
+                (1 + total_return) ** (252 / len(daily_returns)) - 1
+                if len(daily_returns) > 0
+                else 0
+            ),
             "volatility": volatility,
             "sharpe_ratio": sharpe_ratio,
             "max_drawdown": abs(max_drawdown),
-            "calmar_ratio": (total_return / abs(max_drawdown))
-            if max_drawdown != 0
-            else 0,
+            "calmar_ratio": (
+                (total_return / abs(max_drawdown)) if max_drawdown != 0 else 0
+            ),
             "win_rate": win_rate,
             "profit_factor": profit_factor,
             "total_trades": len(self.trades),
-            "avg_trade_duration": np.mean([t.holding_period.days for t in self.trades])
-            if self.trades
-            else 0,
+            "avg_trade_duration": (
+                np.mean([t.holding_period.days for t in self.trades])
+                if self.trades
+                else 0
+            ),
             "best_trade": max([t.pnl for t in self.trades]) if self.trades else 0,
             "worst_trade": min([t.pnl for t in self.trades]) if self.trades else 0,
         }

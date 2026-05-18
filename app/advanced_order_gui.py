@@ -852,9 +852,11 @@ class AdvancedOrderGUI:
                 symbol=self.primary_symbol_var.get(),
                 side=OrderSide(self.primary_side_var.get()),
                 quantity=float(self.primary_quantity_var.get()),
-                limit_price=float(self.primary_price_var.get())
-                if self.primary_price_var.get()
-                else None,
+                limit_price=(
+                    float(self.primary_price_var.get())
+                    if self.primary_price_var.get()
+                    else None
+                ),
             )
 
             secondary_order = AdvancedOrder(
@@ -863,9 +865,11 @@ class AdvancedOrderGUI:
                 symbol=self.secondary_symbol_var.get(),
                 side=OrderSide(self.secondary_side_var.get()),
                 quantity=float(self.secondary_quantity_var.get()),
-                limit_price=float(self.secondary_price_var.get())
-                if self.secondary_price_var.get()
-                else None,
+                limit_price=(
+                    float(self.secondary_price_var.get())
+                    if self.secondary_price_var.get()
+                    else None
+                ),
             )
 
             oco_id = self.automation_engine.create_oco_order(
@@ -938,9 +942,11 @@ class AdvancedOrderGUI:
                 symbol=self.bracket_symbol_var.get(),
                 side=OrderSide(self.bracket_side_var.get()),
                 quantity=float(self.bracket_quantity_var.get()),
-                limit_price=float(self.bracket_entry_price_var.get())
-                if self.bracket_entry_price_var.get()
-                else None,
+                limit_price=(
+                    float(self.bracket_entry_price_var.get())
+                    if self.bracket_entry_price_var.get()
+                    else None
+                ),
             )
 
             bracket_id = self.automation_engine.create_bracket_order(

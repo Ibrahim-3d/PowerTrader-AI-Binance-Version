@@ -2,6 +2,7 @@
 Specific Exchange Implementations
 All major cryptocurrency exchanges with unified interface
 """
+
 import base64
 import hashlib
 import hmac

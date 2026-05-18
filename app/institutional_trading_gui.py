@@ -722,9 +722,11 @@ class InstitutionalTradingGUI:
             side=self.side_var.get(),
             order_type=order_type,
             quantity=Decimal(self.quantity_var.get()),
-            price=Decimal(self.price_var.get())
-            if self.price_var.get() and order_type != InstitutionalOrderType.MARKET
-            else None,
+            price=(
+                Decimal(self.price_var.get())
+                if self.price_var.get() and order_type != InstitutionalOrderType.MARKET
+                else None
+            ),
             priority=priority,
             account_id=self.account_var.get(),
             trader_id=self.trader_var.get(),

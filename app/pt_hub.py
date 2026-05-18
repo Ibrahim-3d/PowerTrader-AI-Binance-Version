@@ -4152,9 +4152,11 @@ class PowerTraderHub(tk.Tk):
                         f"{order['quantity']}",
                         f"{order.get('price') or order.get('stop_price') or 'N/A'}",
                         order["status"].value,
-                        conditions_text[:20] + "..."
-                        if len(conditions_text) > 20
-                        else conditions_text,
+                        (
+                            conditions_text[:20] + "..."
+                            if len(conditions_text) > 20
+                            else conditions_text
+                        ),
                         created_str,
                     ),
                 )
@@ -4829,9 +4831,11 @@ class PowerTraderHub(tk.Tk):
                     status,
                     version,
                     dep_type,
-                    dep.description[:50] + "..."
-                    if len(dep.description) > 50
-                    else dep.description,
+                    (
+                        dep.description[:50] + "..."
+                        if len(dep.description) > 50
+                        else dep.description
+                    ),
                 ),
             )
 
@@ -6276,9 +6280,11 @@ Platform: {sys.platform}
                 if lp.info.proc and lp.info.proc.poll() is None
             ]
             self.trainer_status_lbl.config(
-                text=f"running: {', '.join(running)}"
-                if running
-                else "(no trainers running)"
+                text=(
+                    f"running: {', '.join(running)}"
+                    if running
+                    else "(no trainers running)"
+                )
             )
 
             lp = self.trainers.get(sel)
@@ -7357,7 +7363,9 @@ Platform: {sys.platform}
 
         # --- Exchange Provider Settings ---
         ttk.Label(
-            frm, text="🌍 Exchange Provider Settings", font=("TkDefaultFont", 10, "bold")
+            frm,
+            text="🌍 Exchange Provider Settings",
+            font=("TkDefaultFont", 10, "bold"),
         ).grid(row=r, column=0, columnspan=3, sticky="w", pady=(10, 5))
         r += 1
 
@@ -8097,9 +8105,9 @@ Platform: {sys.platform}
                     if len(raw) == 64:
                         raw = raw[:32]
                         priv_b64 = base64.b64encode(raw).decode("utf-8")
-                        private_b64_state[
-                            "value"
-                        ] = priv_b64  # keep UI state consistent
+                        private_b64_state["value"] = (
+                            priv_b64  # keep UI state consistent
+                        )
                     elif len(raw) != 32:
                         messagebox.showerror(
                             "Bad private key",
@@ -8414,9 +8422,9 @@ Platform: {sys.platform}
                 self.settings["auto_best_price"] = bool(auto_best_price_var.get())
 
                 self.settings["script_neural_runner2"] = neural_script_var.get().strip()
-                self.settings[
-                    "script_neural_trainer"
-                ] = trainer_script_var.get().strip()
+                self.settings["script_neural_trainer"] = (
+                    trainer_script_var.get().strip()
+                )
                 self.settings["script_trader"] = trader_script_var.get().strip()
 
                 self.settings["ui_refresh_seconds"] = float(

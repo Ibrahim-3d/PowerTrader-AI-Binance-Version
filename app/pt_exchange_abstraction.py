@@ -2,6 +2,7 @@
 Multi-Exchange Trading Platform Abstraction Layer
 Supports all major cryptocurrency exchanges with unified interface
 """
+
 import abc
 import json
 import os

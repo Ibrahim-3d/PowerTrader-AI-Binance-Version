@@ -812,9 +812,9 @@ class DCAEngine:
             "unrealized_pnl": unrealized_pnl,
             "unrealized_pct": unrealized_pct,
             "execution_count": len(plan["execution_history"]),
-            "last_execution": plan["execution_history"][-1]
-            if plan["execution_history"]
-            else None,
+            "last_execution": (
+                plan["execution_history"][-1] if plan["execution_history"] else None
+            ),
         }
 
         return status

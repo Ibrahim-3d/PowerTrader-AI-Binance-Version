@@ -222,17 +222,19 @@ class HealthMonitor:
             cpu_percent = process.cpu_percent()
 
             health_status["checks"]["memory"] = {
-                "status": "ok"
-                if memory_mb < self.thresholds["max_memory_mb"]
-                else "warning",
+                "status": (
+                    "ok" if memory_mb < self.thresholds["max_memory_mb"] else "warning"
+                ),
                 "value_mb": round(memory_mb, 1),
                 "threshold_mb": self.thresholds["max_memory_mb"],
             }
 
             health_status["checks"]["cpu"] = {
-                "status": "ok"
-                if cpu_percent < self.thresholds["max_cpu_percent"]
-                else "warning",
+                "status": (
+                    "ok"
+                    if cpu_percent < self.thresholds["max_cpu_percent"]
+                    else "warning"
+                ),
                 "value_percent": round(cpu_percent, 1),
                 "threshold_percent": self.thresholds["max_cpu_percent"],
             }
@@ -247,10 +249,12 @@ class HealthMonitor:
             }
 
             health_status["checks"]["disk"] = {
-                "status": "ok"
-                if disk_usage.free / (1024**3)
-                > self.thresholds["min_available_disk_gb"]
-                else "warning",
+                "status": (
+                    "ok"
+                    if disk_usage.free / (1024**3)
+                    > self.thresholds["min_available_disk_gb"]
+                    else "warning"
+                ),
                 "free_gb": round(disk_usage.free / (1024**3), 1),
             }
 
@@ -357,9 +361,9 @@ class HealthMonitor:
             summary[name] = {
                 "count": len(values),
                 "latest": values[-1]["value"] if values else None,
-                "average": sum(recent_values) / len(recent_values)
-                if recent_values
-                else 0,
+                "average": (
+                    sum(recent_values) / len(recent_values) if recent_values else 0
+                ),
                 "min": min(recent_values) if recent_values else 0,
                 "max": max(recent_values) if recent_values else 0,
             }

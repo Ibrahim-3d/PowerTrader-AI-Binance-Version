@@ -20,6 +20,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 class TestPowerTraderHubIntegration(unittest.TestCase):
     """Integration tests for PowerTrader Hub with all advanced features"""
 
+    def _skip_if_display_error(self, exception):
+        """Skip the test if the exception is caused by a missing display server."""
+        err_str = str(exception).lower()
+        if "display" in err_str or "tcl" in err_str or "screen" in err_str:
+            self.skipTest(f"No display available in this environment: {exception}")
+
     @classmethod
     def setUpClass(cls):
         """Set up test class"""
@@ -51,6 +57,7 @@ class TestPowerTraderHubIntegration(unittest.TestCase):
             self.assertTrue(hasattr(hub, "title"))
 
         except Exception as e:
+            self._skip_if_display_error(e)
             self.fail(f"Failed to create PowerTrader Hub: {e}")
 
     def test_tab_integration(self):
@@ -139,6 +146,7 @@ class TestPowerTraderHubIntegration(unittest.TestCase):
                 self.assertGreater(len(main_tabs), 0)
 
             except Exception as e:
+                self._skip_if_display_error(e)
                 # Should not fail completely due to missing dependencies
                 if "pandas" in str(e) or "numpy" in str(e):
                     print(f"Graceful degradation working: {e}")
@@ -165,6 +173,7 @@ class TestPowerTraderHubIntegration(unittest.TestCase):
                     pass  # Tab operations may fail but shouldn't crash
 
         except Exception as e:
+            self._skip_if_display_error(e)
             self.fail(f"Hub failed basic robustness test: {e}")
 
 
