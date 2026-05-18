@@ -551,8 +551,8 @@ class ResearchEngineGUI:
                 except Exception as e:
                     self.parent.after(
                         0,
-                        lambda: self.status_label.config(
-                            text=f"Model refresh failed: {str(e)}"
+                        lambda err=e: self.status_label.config(
+                            text=f"Model refresh failed: {str(err)}"
                         ),
                     )
                 finally:
