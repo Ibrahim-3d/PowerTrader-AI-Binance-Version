@@ -7488,6 +7488,7 @@ Platform: {sys.platform}
             # Try encrypted vault first, then fall back to plaintext
             import logging as _log
             from pt_credentials import SecureCredentialManager as _SCM
+
             _mgr = _SCM(self.project_dir)
             if _mgr.has_encrypted_credentials():
                 try:
@@ -8171,6 +8172,7 @@ Platform: {sys.platform}
                     # Encrypt credentials via SecureCredentialManager
                     # (replaces plaintext r_key.txt / r_secret.txt writes)
                     from pt_credentials import SecureCredentialManager as _SCM
+
                     _mgr = _SCM(self.project_dir)
                     if not _mgr.encrypt_credentials(api_key, priv_b64):
                         raise RuntimeError(
