@@ -16,14 +16,15 @@ from pt_validation import DataIntegrityValidator
 def _make_test_db(path: str) -> None:
     """Create a minimal SQLite DB for testing."""
     conn = sqlite3.connect(path)
-    conn.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, symbol TEXT, amount REAL)")
+    conn.execute(
+        "CREATE TABLE orders (id INTEGER PRIMARY KEY, symbol TEXT, amount REAL)"
+    )
     conn.execute("INSERT INTO orders VALUES (1, 'BTC-USD', 0.5)")
     conn.commit()
     conn.close()
 
 
 class TestDatabaseBackupManager(unittest.TestCase):
-
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
         self.db_path = os.path.join(self.tmpdir, "test.db")
@@ -135,6 +136,7 @@ class TestDatabaseBackupManager(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
 
@@ -142,7 +144,6 @@ class TestDatabaseBackupManager(unittest.TestCase):
 # DataIntegrityValidator tests
 # ---------------------------------------------------------------------------
 class TestDataIntegrityValidator(unittest.TestCase):
-
     def test_nan_detection(self):
         self.assertTrue(DataIntegrityValidator.has_nan_or_inf(float("nan")))
         self.assertTrue(DataIntegrityValidator.has_nan_or_inf(float("inf")))
@@ -191,12 +192,16 @@ class TestDataIntegrityValidator(unittest.TestCase):
 
     def test_validate_numeric_fields_clean(self):
         data = {"price": 100.5, "volume": 1000.0}
-        violations = DataIntegrityValidator.validate_numeric_fields(data, ["price", "volume"])
+        violations = DataIntegrityValidator.validate_numeric_fields(
+            data, ["price", "volume"]
+        )
         self.assertEqual(violations, [])
 
     def test_validate_numeric_fields_missing(self):
         data = {"price": 100.5}
-        violations = DataIntegrityValidator.validate_numeric_fields(data, ["price", "volume"])
+        violations = DataIntegrityValidator.validate_numeric_fields(
+            data, ["price", "volume"]
+        )
         self.assertTrue(any("volume" in v for v in violations))
 
     def test_validate_numeric_fields_nan(self):
@@ -218,7 +223,9 @@ class TestDataIntegrityValidator(unittest.TestCase):
 
     def test_batch_integrity_all_clean(self):
         records = [{"price": 100.0, "volume": 10.0} for _ in range(5)]
-        result = DataIntegrityValidator.check_batch_integrity(records, ["price", "volume"])
+        result = DataIntegrityValidator.check_batch_integrity(
+            records, ["price", "volume"]
+        )
         self.assertTrue(result["integrity_ok"])
         self.assertEqual(result["corrupt"], 0)
 
@@ -227,13 +234,17 @@ class TestDataIntegrityValidator(unittest.TestCase):
             {"price": 100.0, "volume": 10.0},
             {"price": float("nan"), "volume": 10.0},
         ]
-        result = DataIntegrityValidator.check_batch_integrity(records, ["price", "volume"])
+        result = DataIntegrityValidator.check_batch_integrity(
+            records, ["price", "volume"]
+        )
         self.assertFalse(result["integrity_ok"])
         self.assertIn(1, result["corrupt_indices"])
 
     def test_batch_integrity_detects_missing_field(self):
         records = [{"price": 100.0}, {"price": 200.0}]
-        result = DataIntegrityValidator.check_batch_integrity(records, ["price", "volume"])
+        result = DataIntegrityValidator.check_batch_integrity(
+            records, ["price", "volume"]
+        )
         self.assertFalse(result["integrity_ok"])
 
 

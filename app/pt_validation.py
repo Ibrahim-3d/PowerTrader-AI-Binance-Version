@@ -13,11 +13,13 @@ from typing import Any, Dict, List, Tuple, Union
 
 class ValidationError(Exception):
     """Custom exception for validation errors."""
+
     pass
 
 
 class DataCorruptionError(Exception):
     """Raised when data integrity/corruption is detected."""
+
     pass
 
 
@@ -117,7 +119,9 @@ class InputValidator:
             if int_timestamp < 1577836800:
                 raise ValidationError(f"{field_name} too old: {int_timestamp}")
             if int_timestamp > 2524608000:
-                raise ValidationError(f"{field_name} too far in future: {int_timestamp}")
+                raise ValidationError(
+                    f"{field_name} too far in future: {int_timestamp}"
+                )
             return int_timestamp
         except (ValueError, TypeError):
             raise ValidationError(f"Invalid {field_name} format: {timestamp}")
@@ -137,13 +141,17 @@ class InputValidator:
         validated["id"] = str(order_id).strip()
         validated["symbol"] = InputValidator.validate_trading_pair(order_data["symbol"])
         validated["price"] = InputValidator.validate_price(order_data["price"])
-        validated["quantity"] = InputValidator.validate_volume(order_data["quantity"], "quantity")
+        validated["quantity"] = InputValidator.validate_volume(
+            order_data["quantity"], "quantity"
+        )
         side = order_data.get("side", "").strip().lower()
         if side not in ["buy", "sell"]:
             raise ValidationError(f"Invalid order side: {side}")
         validated["side"] = side
         if "created_at" in order_data:
-            validated["created_at"] = InputValidator.validate_timestamp(order_data["created_at"])
+            validated["created_at"] = InputValidator.validate_timestamp(
+                order_data["created_at"]
+            )
         if "status" in order_data:
             status = str(order_data["status"]).strip().lower()
             valid_statuses = ["pending", "filled", "cancelled", "rejected", "partial"]
@@ -158,15 +166,23 @@ class InputValidator:
             raise ValidationError("Market data must be a dictionary")
         validated = {}
         if "symbol" in market_data:
-            validated["symbol"] = InputValidator.validate_trading_pair(market_data["symbol"])
+            validated["symbol"] = InputValidator.validate_trading_pair(
+                market_data["symbol"]
+            )
         for field in ["price", "open", "high", "low", "close", "ask", "bid"]:
             if field in market_data and market_data[field] is not None:
-                validated[field] = InputValidator.validate_price(market_data[field], field)
+                validated[field] = InputValidator.validate_price(
+                    market_data[field], field
+                )
         for field in ["volume", "base_volume", "quote_volume"]:
             if field in market_data and market_data[field] is not None:
-                validated[field] = InputValidator.validate_volume(market_data[field], field)
+                validated[field] = InputValidator.validate_volume(
+                    market_data[field], field
+                )
         if "timestamp" in market_data:
-            validated["timestamp"] = InputValidator.validate_timestamp(market_data["timestamp"])
+            validated["timestamp"] = InputValidator.validate_timestamp(
+                market_data["timestamp"]
+            )
         return validated
 
     @staticmethod
@@ -210,7 +226,9 @@ class InputValidator:
                 try:
                     value = float(config_data[field])
                     if value < min_val or value > max_val:
-                        raise ValidationError(f"{field} must be between {min_val} and {max_val}")
+                        raise ValidationError(
+                            f"{field} must be between {min_val} and {max_val}"
+                        )
                     validated[field] = value
                 except (ValueError, TypeError):
                     raise ValidationError(f"Invalid {field} format")
@@ -230,7 +248,10 @@ class InputValidator:
                 except (ValueError, TypeError):
                     continue
             validated["dca_levels"] = sorted(validated_levels, reverse=True)
-        if "main_neural_dir" in config_data and config_data["main_neural_dir"] is not None:
+        if (
+            "main_neural_dir" in config_data
+            and config_data["main_neural_dir"] is not None
+        ):
             validated["main_neural_dir"] = InputValidator.sanitize_string(
                 config_data["main_neural_dir"], 500
             )
@@ -253,7 +274,7 @@ class DataIntegrityValidator:
     """
 
     # Default anomaly thresholds
-    PRICE_SPIKE_Z_SCORE = 5.0      # Flag if value deviates > 5 std devs from series mean
+    PRICE_SPIKE_Z_SCORE = 5.0  # Flag if value deviates > 5 std devs from series mean
     MAX_MISSING_FIELD_RATIO = 0.1  # Allow at most 10% missing fields in a batch
 
     @staticmethod
@@ -285,13 +306,20 @@ class DataIntegrityValidator:
         if len(fields) < 4:
             return violations  # Can't do cross-checks with missing fields
 
-        high, low, open_, close = fields.get("high"), fields.get("low"), fields.get("open"), fields.get("close")
+        high, low, open_, close = (
+            fields.get("high"),
+            fields.get("low"),
+            fields.get("open"),
+            fields.get("close"),
+        )
 
         if high is not None and low is not None and high < low:
             violations.append(f"high ({high}) < low ({low})")
         if high is not None and open_ is not None and open_ > high:
             violations.append(f"open ({open_}) > high ({high})")
-        if high is not None and close is not None and close > high * 1.001:  # 0.1% tolerance
+        if (
+            high is not None and close is not None and close > high * 1.001
+        ):  # 0.1% tolerance
             violations.append(f"close ({close}) > high ({high})")
         if low is not None and open_ is not None and open_ < low * 0.999:
             violations.append(f"open ({open_}) < low ({low})")
@@ -323,6 +351,7 @@ class DataIntegrityValidator:
         if len(prices) < 3:
             return []
         import statistics
+
         try:
             mean = statistics.mean(prices)
             std = statistics.stdev(prices)
@@ -331,8 +360,7 @@ class DataIntegrityValidator:
         if std == 0:
             return []
         return [
-            (i, v) for i, v in enumerate(prices)
-            if abs((v - mean) / std) > z_threshold
+            (i, v) for i, v in enumerate(prices) if abs((v - mean) / std) > z_threshold
         ]
 
     @staticmethod

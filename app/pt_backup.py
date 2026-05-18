@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BackupRecord:
     """Metadata for a single backup file."""
+
     backup_id: str
     source_db: str
     backup_path: str
@@ -51,6 +52,7 @@ class BackupRecord:
 @dataclass
 class RestoreResult:
     """Result of a restore operation."""
+
     success: bool
     backup_id: str
     restored_from: str
@@ -202,7 +204,9 @@ class DatabaseBackupManager:
             self._append_manifest(record)
             logger.info(
                 "Backup created: %s (%d bytes, integrity=%s)",
-                backup_id, file_size, integrity_ok,
+                backup_id,
+                file_size,
+                integrity_ok,
             )
 
             # Step 7: Prune
@@ -227,12 +231,16 @@ class DatabaseBackupManager:
         if current_checksum != record.sha256_checksum:
             logger.error(
                 "Backup checksum MISMATCH for %s: expected %s, got %s",
-                backup_id, record.sha256_checksum, current_checksum,
+                backup_id,
+                record.sha256_checksum,
+                current_checksum,
             )
             return False
 
         integrity = self.check_db_integrity(record.backup_path)
-        logger.info("Backup %s verified: checksum OK, integrity=%s", backup_id, integrity)
+        logger.info(
+            "Backup %s verified: checksum OK, integrity=%s", backup_id, integrity
+        )
         return integrity
 
     # ------------------------------------------------------------------
@@ -250,8 +258,10 @@ class DatabaseBackupManager:
             record = self._get_record(backup_id)
             if not record:
                 return RestoreResult(
-                    success=False, backup_id=backup_id,
-                    restored_from="", restored_to="",
+                    success=False,
+                    backup_id=backup_id,
+                    restored_from="",
+                    restored_to="",
                     message=f"Backup record not found: {backup_id}",
                     timestamp=time.time(),
                 )
@@ -259,8 +269,10 @@ class DatabaseBackupManager:
             # Verify before restore
             if not self.verify_backup(backup_id):
                 return RestoreResult(
-                    success=False, backup_id=backup_id,
-                    restored_from=record.backup_path, restored_to="",
+                    success=False,
+                    backup_id=backup_id,
+                    restored_from=record.backup_path,
+                    restored_to="",
                     message="Backup verification failed — restore aborted",
                     timestamp=time.time(),
                 )
@@ -274,8 +286,10 @@ class DatabaseBackupManager:
                 os.replace(tmp_path, target)
                 logger.info("Restored %s → %s", backup_id, target)
                 return RestoreResult(
-                    success=True, backup_id=backup_id,
-                    restored_from=record.backup_path, restored_to=target,
+                    success=True,
+                    backup_id=backup_id,
+                    restored_from=record.backup_path,
+                    restored_to=target,
                     message="Restore successful",
                     timestamp=time.time(),
                 )
@@ -286,8 +300,10 @@ class DatabaseBackupManager:
                     pass
                 logger.error("Restore failed: %s", exc)
                 return RestoreResult(
-                    success=False, backup_id=backup_id,
-                    restored_from=record.backup_path, restored_to=target,
+                    success=False,
+                    backup_id=backup_id,
+                    restored_from=record.backup_path,
+                    restored_to=target,
                     message=f"Restore failed: {exc}",
                     timestamp=time.time(),
                 )
@@ -297,8 +313,12 @@ class DatabaseBackupManager:
         records = self.list_backups()
         if not records:
             return RestoreResult(
-                success=False, backup_id="", restored_from="", restored_to="",
-                message="No backups available", timestamp=time.time(),
+                success=False,
+                backup_id="",
+                restored_from="",
+                restored_to="",
+                message="No backups available",
+                timestamp=time.time(),
             )
         return self.restore(records[-1].backup_id, target_path)
 
@@ -330,12 +350,14 @@ class DatabaseBackupManager:
         self._save_manifest(records)
 
     def _get_record(self, backup_id: str) -> Optional[BackupRecord]:
-        return next((r for r in self._load_manifest() if r.backup_id == backup_id), None)
+        return next(
+            (r for r in self._load_manifest() if r.backup_id == backup_id), None
+        )
 
     def _prune_old_backups(self) -> int:
         """Delete oldest backups when over max_backups limit. Returns count pruned."""
         records = self.list_backups()
-        to_prune = records[:max(0, len(records) - self.max_backups)]
+        to_prune = records[: max(0, len(records) - self.max_backups)]
         for record in to_prune:
             try:
                 os.remove(record.backup_path)
@@ -363,7 +385,8 @@ class DatabaseBackupManager:
         self._scheduler_thread.start()
         logger.info(
             "DB backup scheduler started (interval: %gh, max_backups: %d)",
-            self.backup_interval / 3600, self.max_backups,
+            self.backup_interval / 3600,
+            self.max_backups,
         )
 
     def stop_scheduler(self) -> None:
