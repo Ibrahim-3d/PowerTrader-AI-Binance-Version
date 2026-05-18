@@ -253,7 +253,9 @@ class BinanceExchange(AbstractExchange):
         response = send(url, headers=headers, timeout=10)
         data = response.json()
         if isinstance(data, dict) and "code" in data and data["code"] < 0:
-            raise RuntimeError(f"Binance API error {data['code']}: {data.get('msg', '')}")
+            raise RuntimeError(
+                f"Binance API error {data['code']}: {data.get('msg', '')}"
+            )
         return data
 
     # ------------------------------------------------------------------
@@ -393,11 +395,14 @@ class BinanceExchange(AbstractExchange):
             ValueError: if order_id not in 'SYMBOL:ID' format
         """
         if not self.api_key or not self.api_secret:
-            raise RuntimeError("Binance API credentials required for order cancellation")
+            raise RuntimeError(
+                "Binance API credentials required for order cancellation"
+            )
 
         if ":" not in str(order_id):
             raise ValueError(
-                "Binance cancel requires 'SYMBOL:ORDER_ID' format. Got: " + str(order_id)
+                "Binance cancel requires 'SYMBOL:ORDER_ID' format. Got: "
+                + str(order_id)
             )
 
         binance_symbol, numeric_id = str(order_id).split(":", 1)
