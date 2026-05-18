@@ -8,15 +8,15 @@ from pt_circuit_breaker import (
     CircuitBreakerError,
     CircuitBreakerRegistry,
     CircuitState,
-    get_breaker,
     registry,
 )
 
 
 class TestCircuitBreakerBasic(unittest.TestCase):
-
     def setUp(self):
-        self.cb = CircuitBreaker("test", failure_threshold=3, success_threshold=2, timeout=0.1)
+        self.cb = CircuitBreaker(
+            "test", failure_threshold=3, success_threshold=2, timeout=0.1
+        )
 
     def test_starts_closed(self):
         self.assertEqual(self.cb.state, CircuitState.CLOSED)
@@ -101,9 +101,10 @@ class TestCircuitBreakerBasic(unittest.TestCase):
 
 
 class TestCircuitBreakerDecorator(unittest.TestCase):
-
     def test_decorator_usage(self):
-        cb = CircuitBreaker("deco_test", failure_threshold=2, success_threshold=1, timeout=0.1)
+        cb = CircuitBreaker(
+            "deco_test", failure_threshold=2, success_threshold=1, timeout=0.1
+        )
 
         @cb
         def api_call(value):
@@ -120,7 +121,6 @@ class TestCircuitBreakerDecorator(unittest.TestCase):
 
 
 class TestCircuitBreakerRegistry(unittest.TestCase):
-
     def setUp(self):
         # Isolate each test from module-level breakers and other tests
         registry.clear()
@@ -177,7 +177,6 @@ class TestCircuitBreakerRegistry(unittest.TestCase):
 
 
 class TestCircuitBreakerStats(unittest.TestCase):
-
     def test_stats_track_calls(self):
         # Use isolated breaker (not registry) to avoid state leakage
         cb = CircuitBreaker("stats_test_isolated", failure_threshold=10, timeout=60)
@@ -206,7 +205,9 @@ class TestCircuitBreakerStats(unittest.TestCase):
         self.assertEqual(stats["stats"]["rejected_count"], 1)
 
     def test_stats_reset_on_recovery(self):
-        cb = CircuitBreaker("recovery_stats", failure_threshold=2, success_threshold=1, timeout=0.05)
+        cb = CircuitBreaker(
+            "recovery_stats", failure_threshold=2, success_threshold=1, timeout=0.05
+        )
         for _ in range(2):
             try:
                 cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))

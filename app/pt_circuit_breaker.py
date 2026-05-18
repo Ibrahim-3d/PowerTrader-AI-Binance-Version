@@ -36,6 +36,7 @@ class CircuitState(Enum):
 
 class CircuitBreakerError(Exception):
     """Raised when a circuit breaker is OPEN and rejects a call."""
+
     def __init__(self, name: str, reset_at: float):
         self.name = name
         self.reset_at = reset_at
@@ -48,6 +49,7 @@ class CircuitBreakerError(Exception):
 @dataclass
 class CircuitStats:
     """Rolling statistics for a circuit breaker."""
+
     failure_count: int = 0
     success_count: int = 0
     rejected_count: int = 0
@@ -116,13 +118,17 @@ class CircuitBreaker:
 
     def _resolve_state(self) -> CircuitState:
         """Transition OPEN → HALF_OPEN when timeout has elapsed (must hold lock)."""
-        if self._state == CircuitState.OPEN and time.time() >= self._open_at + self.timeout:
+        if (
+            self._state == CircuitState.OPEN
+            and time.time() >= self._open_at + self.timeout
+        ):
             self._state = CircuitState.HALF_OPEN
             self._half_open_successes = 0
             logger.info(
                 "Circuit '%s' → HALF_OPEN (multiple concurrent calls allowed; "
                 "needs %d consecutive successes to close)",
-                self.name, self.success_threshold,
+                self.name,
+                self.success_threshold,
             )
         return self._state
 
@@ -150,13 +156,17 @@ class CircuitBreaker:
             self._stats.total_calls += 1
 
             if state in (CircuitState.CLOSED, CircuitState.HALF_OPEN):
-                if state == CircuitState.HALF_OPEN or \
-                        self._stats.failure_count >= self.failure_threshold:
+                if (
+                    state == CircuitState.HALF_OPEN
+                    or self._stats.failure_count >= self.failure_threshold
+                ):
                     self._state = CircuitState.OPEN
                     self._open_at = time.time()
                     logger.warning(
                         "Circuit '%s' → OPEN after %d failures. Last error: %s",
-                        self.name, self._stats.failure_count, exc,
+                        self.name,
+                        self._stats.failure_count,
+                        exc,
                     )
 
     def call(self, func: Callable, *args, **kwargs) -> Any:
@@ -183,9 +193,11 @@ class CircuitBreaker:
 
     def __call__(self, func: Callable) -> Callable:
         """Decorator usage: @circuit_breaker"""
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             return self.call(func, *args, **kwargs)
+
         return wrapper
 
     def get_stats(self) -> Dict[str, Any]:
@@ -273,8 +285,7 @@ class CircuitBreakerRegistry:
         """Returns overall health: all CLOSED = healthy."""
         stats = self.get_all_stats()
         open_circuits = [
-            name for name, s in stats.items()
-            if s["state"] != CircuitState.CLOSED.value
+            name for name, s in stats.items() if s["state"] != CircuitState.CLOSED.value
         ]
         return {
             "healthy": len(open_circuits) == 0,
@@ -341,11 +352,20 @@ def get_breaker(
 # all failures are caught. Callers integrating with specific HTTP clients should
 # override with narrower exception types.
 ROBINHOOD_BREAKER = get_breaker(
-    "robinhood_api", failure_threshold=5, success_threshold=2, timeout=60.0,
+    "robinhood_api",
+    failure_threshold=5,
+    success_threshold=2,
+    timeout=60.0,
 )
 MARKET_DATA_BREAKER = get_breaker(
-    "market_data", failure_threshold=3, success_threshold=1, timeout=30.0,
+    "market_data",
+    failure_threshold=3,
+    success_threshold=1,
+    timeout=30.0,
 )
 ORDER_EXECUTION_BREAKER = get_breaker(
-    "order_execution", failure_threshold=3, success_threshold=2, timeout=120.0,
+    "order_execution",
+    failure_threshold=3,
+    success_threshold=2,
+    timeout=120.0,
 )
