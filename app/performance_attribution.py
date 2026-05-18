@@ -161,14 +161,18 @@ class PerformanceAttributionEngine:
 
         # Ensure we have sector classifications
         portfolio_df["sector"] = portfolio_df["security"].map(
-            lambda x: x.sector
-            if hasattr(x, "sector") and x.sector
-            else self.sector_classifications.get(str(x), "Other")
+            lambda x: (
+                x.sector
+                if hasattr(x, "sector") and x.sector
+                else self.sector_classifications.get(str(x), "Other")
+            )
         )
         benchmark_df["sector"] = benchmark_df["security"].map(
-            lambda x: x.sector
-            if hasattr(x, "sector") and x.sector
-            else self.sector_classifications.get(str(x), "Other")
+            lambda x: (
+                x.sector
+                if hasattr(x, "sector") and x.sector
+                else self.sector_classifications.get(str(x), "Other")
+            )
         )
 
         # Aggregate by sector
@@ -681,9 +685,11 @@ class PerformanceAttributionEngine:
         # Sort by absolute contribution
         sorted_items = sorted(
             result.attribution_breakdown.items(),
-            key=lambda x: abs(x[1])
-            if isinstance(x[1], (int, float))
-            else abs(x[1].get("total", 0)),
+            key=lambda x: (
+                abs(x[1])
+                if isinstance(x[1], (int, float))
+                else abs(x[1].get("total", 0))
+            ),
             reverse=True,
         )
 

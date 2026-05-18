@@ -952,9 +952,9 @@ class ConditionalOrderEngine:
 
             # Add current prices to context
             for symbol in ["BTCUSDT", "ETHUSDT", "ADAUSDT"]:
-                context[
-                    f"{symbol}_price"
-                ] = self.market_data_provider.get_current_price(symbol)
+                context[f"{symbol}_price"] = (
+                    self.market_data_provider.get_current_price(symbol)
+                )
 
             # Evaluate all rules
             triggered_actions = self.rule_engine.evaluate_all_rules(context)

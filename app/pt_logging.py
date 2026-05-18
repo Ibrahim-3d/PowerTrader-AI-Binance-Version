@@ -93,9 +93,11 @@ class JSONFormatter(logging.Formatter):
             tags=getattr(record, "tags", None),
             context=getattr(record, "context", None) if self.include_context else None,
             exception_info=exc_info,
-            performance_metrics=getattr(record, "performance_metrics", None)
-            if self.include_performance
-            else None,
+            performance_metrics=(
+                getattr(record, "performance_metrics", None)
+                if self.include_performance
+                else None
+            ),
         )
 
         return json.dumps(asdict(log_entry), default=str, separators=(",", ":"))

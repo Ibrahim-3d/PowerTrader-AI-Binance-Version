@@ -232,11 +232,11 @@ class OrderAnalytics:
                 "gross_profit": gross_profit,
                 "gross_loss": gross_loss,
                 "win_rate": win_rate,
-                "profit_factor": gross_profit / gross_loss
-                if gross_loss > 0
-                else float("inf")
-                if gross_profit > 0
-                else 0.0,
+                "profit_factor": (
+                    gross_profit / gross_loss
+                    if gross_loss > 0
+                    else float("inf") if gross_profit > 0 else 0.0
+                ),
                 "average_win": statistics.mean(wins) if wins else 0.0,
                 "average_loss": statistics.mean(losses) if losses else 0.0,
                 "largest_win": max(wins) if wins else 0.0,
@@ -413,9 +413,9 @@ class OrderAnalytics:
                     "order_count": order_count,
                     "total_pnl": bucket["pnl"],
                     "avg_pnl": bucket["pnl"] / order_count if order_count > 0 else 0.0,
-                    "max_size": bucket["max"]
-                    if bucket["max"] != float("inf")
-                    else "No limit",
+                    "max_size": (
+                        bucket["max"] if bucket["max"] != float("inf") else "No limit"
+                    ),
                 }
 
             return analysis
@@ -517,9 +517,9 @@ class OrderAnalytics:
                 results[strategy] = {
                     "total_orders": trades,
                     "total_pnl": data["total_pnl"],
-                    "avg_pnl_per_trade": data["total_pnl"] / trades
-                    if trades > 0
-                    else 0.0,
+                    "avg_pnl_per_trade": (
+                        data["total_pnl"] / trades if trades > 0 else 0.0
+                    ),
                     "win_rate": (wins / trades * 100) if trades > 0 else 0.0,
                     "wins": wins,
                     "losses": data["losses"],
@@ -691,9 +691,9 @@ class OrderAnalytics:
             }
 
             # Overall performance
-            report["sections"][
-                "overall_performance"
-            ] = self.get_order_performance_summary(timeframe)
+            report["sections"]["overall_performance"] = (
+                self.get_order_performance_summary(timeframe)
+            )
 
             # Strategy performance
             report["sections"]["strategy_performance"] = self.get_strategy_performance()

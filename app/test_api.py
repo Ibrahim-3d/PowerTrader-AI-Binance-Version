@@ -2,6 +2,7 @@
 """
 Test script for PowerTrader API Server
 """
+
 import os
 import sys
 import threading

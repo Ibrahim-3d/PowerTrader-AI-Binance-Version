@@ -195,16 +195,18 @@ class OrderBook:
             "filled_quantity": quantity - remaining_quantity,
             "remaining_quantity": remaining_quantity,
             "levels_consumed": levels_consumed,
-            "slippage": abs(
-                weighted_price
-                - (
-                    self.best_bid.price
-                    if side.lower() == "sell"
-                    else self.best_ask.price
+            "slippage": (
+                abs(
+                    weighted_price
+                    - (
+                        self.best_bid.price
+                        if side.lower() == "sell"
+                        else self.best_ask.price
+                    )
                 )
-            )
-            if weighted_price > 0
-            else 0,
+                if weighted_price > 0
+                else 0
+            ),
         }
 
 
@@ -292,8 +294,7 @@ class MarketDataAggregator:
         cursor = conn.cursor()
 
         # Ticker data table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS tickers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 symbol TEXT NOT NULL,
@@ -310,12 +311,10 @@ class MarketDataAggregator:
                 vwap REAL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
-        """
-        )
+        """)
 
         # Order book table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS order_books (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 symbol TEXT NOT NULL,
@@ -327,12 +326,10 @@ class MarketDataAggregator:
                 level_index INTEGER NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
-        """
-        )
+        """)
 
         # Trades table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS trades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 symbol TEXT NOT NULL,
@@ -345,12 +342,10 @@ class MarketDataAggregator:
                 buyer_maker INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
-        """
-        )
+        """)
 
         # Klines table
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS klines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 symbol TEXT NOT NULL,
@@ -368,8 +363,7 @@ class MarketDataAggregator:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(symbol, exchange, interval, open_time)
             )
-        """
-        )
+        """)
 
         # Create indexes for better performance
         cursor.execute(

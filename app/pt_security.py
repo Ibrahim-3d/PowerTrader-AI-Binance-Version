@@ -2,6 +2,7 @@
 Dependency security checker for PowerTraderAI+.
 Validates and monitors dependencies for known vulnerabilities.
 """
+
 import json
 import os
 import re

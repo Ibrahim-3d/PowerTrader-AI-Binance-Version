@@ -36,16 +36,14 @@ class OrderManagementMigrations:
         conn = sqlite3.connect(self.db_path)
         try:
             cursor = conn.cursor()
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS migrations (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     migration_name TEXT UNIQUE NOT NULL,
                     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     checksum TEXT
                 )
-            """
-            )
+            """)
             conn.commit()
             logger.info("Created migrations tracking table")
         finally:

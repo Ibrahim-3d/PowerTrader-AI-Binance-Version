@@ -869,21 +869,21 @@ class CryptoAPITrading:
             "fees_usd": fees_usd,
             "realized_profit_usd": realized,
             "order_id": order_id,
-            "buying_power_before": float(buying_power_before)
-            if buying_power_before is not None
-            else None,
-            "buying_power_after": float(buying_power_after)
-            if buying_power_after is not None
-            else None,
-            "buying_power_delta": float(buying_power_delta)
-            if buying_power_delta is not None
-            else None,
-            "position_cost_used_usd": float(position_cost_used)
-            if position_cost_used is not None
-            else None,
-            "position_cost_after_usd": float(position_cost_after)
-            if position_cost_after is not None
-            else None,
+            "buying_power_before": (
+                float(buying_power_before) if buying_power_before is not None else None
+            ),
+            "buying_power_after": (
+                float(buying_power_after) if buying_power_after is not None else None
+            ),
+            "buying_power_delta": (
+                float(buying_power_delta) if buying_power_delta is not None else None
+            ),
+            "position_cost_used_usd": (
+                float(position_cost_used) if position_cost_used is not None else None
+            ),
+            "position_cost_after_usd": (
+                float(position_cost_after) if position_cost_after is not None else None
+            ),
         }
         self._append_jsonl(TRADE_HISTORY_PATH, entry)
 
@@ -1285,10 +1285,10 @@ class CryptoAPITrading:
                         try:
                             # Validate currency symbol
                             if "currency" in holding:
-                                holding[
-                                    "currency"
-                                ] = InputValidator.validate_crypto_symbol(
-                                    holding["currency"]
+                                holding["currency"] = (
+                                    InputValidator.validate_crypto_symbol(
+                                        holding["currency"]
+                                    )
                                 )
 
                             # Validate quantities and values
@@ -1529,12 +1529,14 @@ class CryptoAPITrading:
                                 "symbol": symbol,
                                 "side": "buy",
                                 "buying_power_before": float(buying_power_before),
-                                "avg_cost_basis": float(avg_cost_basis)
-                                if avg_cost_basis is not None
-                                else None,
-                                "pnl_pct": float(pnl_pct)
-                                if pnl_pct is not None
-                                else None,
+                                "avg_cost_basis": (
+                                    float(avg_cost_basis)
+                                    if avg_cost_basis is not None
+                                    else None
+                                ),
+                                "pnl_pct": (
+                                    float(pnl_pct) if pnl_pct is not None else None
+                                ),
                                 "tag": tag,
                                 "created_ts": time.time(),
                             }
@@ -1575,12 +1577,16 @@ class CryptoAPITrading:
                             side="buy",
                             symbol=symbol,
                             qty=float(filled_qty),
-                            price=float(avg_fill_price)
-                            if avg_fill_price is not None
-                            else None,
-                            avg_cost_basis=float(avg_cost_basis)
-                            if avg_cost_basis is not None
-                            else None,
+                            price=(
+                                float(avg_fill_price)
+                                if avg_fill_price is not None
+                                else None
+                            ),
+                            avg_cost_basis=(
+                                float(avg_cost_basis)
+                                if avg_cost_basis is not None
+                                else None
+                            ),
                             pnl_pct=float(pnl_pct) if pnl_pct is not None else None,
                             tag=tag,
                             order_id=order_id,
@@ -1691,9 +1697,11 @@ class CryptoAPITrading:
                         "symbol": symbol,
                         "side": "sell",
                         "buying_power_before": float(buying_power_before),
-                        "avg_cost_basis": float(avg_cost_basis)
-                        if avg_cost_basis is not None
-                        else None,
+                        "avg_cost_basis": (
+                            float(avg_cost_basis)
+                            if avg_cost_basis is not None
+                            else None
+                        ),
                         "pnl_pct": float(pnl_pct) if pnl_pct is not None else None,
                         "tag": tag,
                         "created_ts": time.time(),
@@ -1801,9 +1809,9 @@ class CryptoAPITrading:
                 symbol=symbol,
                 qty=float(actual_qty),
                 price=float(actual_price) if actual_price is not None else None,
-                avg_cost_basis=float(avg_cost_basis)
-                if avg_cost_basis is not None
-                else None,
+                avg_cost_basis=(
+                    float(avg_cost_basis) if avg_cost_basis is not None else None
+                ),
                 pnl_pct=float(pnl_pct) if pnl_pct is not None else None,
                 tag=tag,
                 order_id=order_id,
@@ -2128,9 +2136,9 @@ class CryptoAPITrading:
                 "trail_active": True if (trail_status == "ON") else False,
                 "trail_line": float(trail_line_disp) if trail_line_disp else 0.0,
                 "trail_peak": float(trail_peak_disp) if trail_peak_disp else 0.0,
-                "dist_to_trail_pct": float(dist_to_trail_pct)
-                if dist_to_trail_pct
-                else 0.0,
+                "dist_to_trail_pct": (
+                    float(dist_to_trail_pct) if dist_to_trail_pct else 0.0
+                ),
             }
 
             print(

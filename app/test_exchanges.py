@@ -3,6 +3,7 @@
 Multi-Exchange System Test
 Quick test to verify all exchanges are working
 """
+
 import os
 import sys
 

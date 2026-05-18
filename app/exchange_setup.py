@@ -3,6 +3,7 @@
 PowerTraderAI+ Exchange Configuration Tool
 Setup and manage multiple cryptocurrency exchanges
 """
+
 import os
 import sys
 from typing import List, Optional

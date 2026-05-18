@@ -109,9 +109,9 @@ class TestPortfolioOptimization(unittest.TestCase):
             )
 
             self.assertIsInstance(frontier, pd.DataFrame)
-            self.assertIn("return", frontier.columns)
-            self.assertIn("volatility", frontier.columns)
-            self.assertIn("sharpe_ratio", frontier.columns)
+            self.assertIn("Return", frontier.columns)
+            self.assertIn("Volatility", frontier.columns)
+            self.assertIn("Sharpe_Ratio", frontier.columns)
 
             # Check that we have reasonable number of points
             self.assertGreater(len(frontier), 5)

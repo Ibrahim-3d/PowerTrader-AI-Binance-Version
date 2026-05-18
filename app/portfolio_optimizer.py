@@ -72,8 +72,7 @@ class PortfolioOptimizer:
     def _init_database(self):
         """Initialize database tables for portfolio optimization."""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS optimized_portfolios (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     portfolio_name TEXT UNIQUE,
@@ -84,11 +83,9 @@ class PortfolioOptimizer:
                     constraints_json TEXT,
                     results_json TEXT
                 )
-            """
-            )
+            """)
 
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS asset_allocations (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     portfolio_id INTEGER,
@@ -99,11 +96,9 @@ class PortfolioOptimizer:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (portfolio_id) REFERENCES optimized_portfolios (id)
                 )
-            """
-            )
+            """)
 
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS rebalancing_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     portfolio_id INTEGER,
@@ -114,11 +109,9 @@ class PortfolioOptimizer:
                     transaction_costs REAL,
                     FOREIGN KEY (portfolio_id) REFERENCES optimized_portfolios (id)
                 )
-            """
-            )
+            """)
 
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS efficient_frontier_points (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     portfolio_id INTEGER,
@@ -129,8 +122,7 @@ class PortfolioOptimizer:
                     calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (portfolio_id) REFERENCES optimized_portfolios (id)
                 )
-            """
-            )
+            """)
 
     def calculate_returns_covariance(
         self, price_data: pd.DataFrame, period: int = 252

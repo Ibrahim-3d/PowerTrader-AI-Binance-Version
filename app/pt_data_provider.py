@@ -7,6 +7,7 @@ interface for getting market data from any of the 65+ supported exchanges.
 Instead of hardcoding KuCoin, this allows users to choose their preferred exchange
 for data feeds while maintaining backward compatibility.
 """
+
 import os
 from typing import List, Optional, Tuple, Union
 
@@ -144,11 +145,11 @@ class DataProvider:
         # Convert coin to standard trading pair format
         # Handle different exchange symbol formats
         symbol = self._normalize_symbol(coin)
-        
+
         # Default to getting more historical data if not specified
-        if 'limit' not in kwargs:
-            kwargs['limit'] = 1000
-            
+        if "limit" not in kwargs:
+            kwargs["limit"] = 1000
+
         return self.get_kline_data(symbol, timeframe, **kwargs)
 
     def get_ticker_data(self, symbol: str) -> str:
@@ -183,25 +184,25 @@ class DataProvider:
     def _normalize_symbol(self, coin: str) -> str:
         """
         Normalize cryptocurrency symbol for exchange compatibility.
-        
+
         Args:
             coin: Base cryptocurrency symbol (e.g., "BTC", "ETH")
-            
+
         Returns:
             Normalized symbol format for the active exchange
         """
         # Convert to uppercase
         coin = coin.upper().strip()
-        
+
         # For most exchanges, USDT pairing is standard
         # Handle special cases if needed
-        if coin.endswith('USDT'):
+        if coin.endswith("USDT"):
             return coin
-        elif coin.endswith('-USDT'):
-            return coin.replace('-', '')
+        elif coin.endswith("-USDT"):
+            return coin.replace("-", "")
         else:
             return f"{coin}USDT"
-    
+
     def _get_multi_exchange_kline(self, symbol: str, timeframe: str, **kwargs) -> str:
         """
         Get kline data from multi-exchange system.
@@ -214,8 +215,8 @@ class DataProvider:
         # This should be enhanced to support full historical data when needed
         try:
             # Ensure symbol is in correct format for the exchange
-            normalized_symbol = symbol.replace('-', '').upper()
-            
+            normalized_symbol = symbol.replace("-", "").upper()
+
             price = self.multi_exchange.get_current_price(normalized_symbol)
             # Create a simplified kline response for backward compatibility
             # Format: [timestamp, open, high, low, close, volume]

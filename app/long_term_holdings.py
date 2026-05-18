@@ -78,8 +78,7 @@ class HoldingsDatabase:
         """Initialize the database tables"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS holdings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     symbol TEXT NOT NULL,
@@ -95,11 +94,9 @@ class HoldingsDatabase:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """
-            )
+            """)
 
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS price_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     symbol TEXT NOT NULL,
@@ -107,11 +104,9 @@ class HoldingsDatabase:
                     timestamp TEXT NOT NULL,
                     source TEXT DEFAULT 'manual'
                 )
-            """
-            )
+            """)
 
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS rebalance_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     portfolio_value REAL NOT NULL,
@@ -119,8 +114,7 @@ class HoldingsDatabase:
                     timestamp TEXT NOT NULL,
                     notes TEXT DEFAULT ''
                 )
-            """
-            )
+            """)
             conn.commit()
 
     def add_holding(self, holding: Holding) -> int:

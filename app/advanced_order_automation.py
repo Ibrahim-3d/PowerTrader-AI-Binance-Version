@@ -3,6 +3,8 @@ Advanced Order Types & Automation Engine (Item 23)
 Implements sophisticated order types and automated execution logic
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import os
@@ -24,6 +26,25 @@ try:
 except ImportError:
     ORDER_MODELS_AVAILABLE = False
     print("Warning: Order management models not available")
+
+    # Minimal stubs so that class-body annotations and default values
+    # (e.g. ``status: OrderStatus = OrderStatus.PENDING``) don't raise
+    # NameError when the real module is unavailable (e.g. sqlalchemy missing).
+    class OrderSide(Enum):  # type: ignore[no-redef]
+        BUY = "buy"
+        SELL = "sell"
+
+    class OrderStatus(Enum):  # type: ignore[no-redef]
+        PENDING = "pending"
+        EXECUTING = "executing"
+        FILLED = "filled"
+        CANCELLED = "cancelled"
+        ERROR = "error"
+
+    class OrderType(Enum):  # type: ignore[no-redef]
+        MARKET = "market"
+        LIMIT = "limit"
+
 
 try:
     import ccxt
@@ -188,8 +209,7 @@ class OrderAutomationEngine:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
 
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS advanced_orders (
                     id TEXT PRIMARY KEY,
                     order_type TEXT NOT NULL,
@@ -215,11 +235,9 @@ class OrderAutomationEngine:
                     filled_quantity REAL DEFAULT 0.0,
                     average_fill_price REAL DEFAULT 0.0
                 )
-            """
-            )
+            """)
 
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS oco_orders (
                     id TEXT PRIMARY KEY,
                     primary_order_id TEXT NOT NULL,
@@ -229,11 +247,9 @@ class OrderAutomationEngine:
                     FOREIGN KEY (primary_order_id) REFERENCES advanced_orders (id),
                     FOREIGN KEY (secondary_order_id) REFERENCES advanced_orders (id)
                 )
-            """
-            )
+            """)
 
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS bracket_orders (
                     id TEXT PRIMARY KEY,
                     parent_order_id TEXT NOT NULL,
@@ -244,11 +260,9 @@ class OrderAutomationEngine:
                     FOREIGN KEY (take_profit_order_id) REFERENCES advanced_orders (id),
                     FOREIGN KEY (stop_loss_order_id) REFERENCES advanced_orders (id)
                 )
-            """
-            )
+            """)
 
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS automation_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     order_id TEXT NOT NULL,
@@ -258,8 +272,7 @@ class OrderAutomationEngine:
                     timestamp TEXT NOT NULL,
                     details_json TEXT
                 )
-            """
-            )
+            """)
 
             conn.commit()
 
@@ -360,9 +373,11 @@ class OrderAutomationEngine:
             conditions=[
                 OrderCondition(
                     id=str(uuid.uuid4()),
-                    condition_type=ConditionType.PRICE_ABOVE
-                    if entry_order.side == OrderSide.BUY
-                    else ConditionType.PRICE_BELOW,
+                    condition_type=(
+                        ConditionType.PRICE_ABOVE
+                        if entry_order.side == OrderSide.BUY
+                        else ConditionType.PRICE_BELOW
+                    ),
                     symbol=entry_order.symbol,
                     operator=">=",
                     target_value=take_profit_price,
@@ -381,9 +396,11 @@ class OrderAutomationEngine:
             conditions=[
                 OrderCondition(
                     id=str(uuid.uuid4()),
-                    condition_type=ConditionType.PRICE_BELOW
-                    if entry_order.side == OrderSide.BUY
-                    else ConditionType.PRICE_ABOVE,
+                    condition_type=(
+                        ConditionType.PRICE_BELOW
+                        if entry_order.side == OrderSide.BUY
+                        else ConditionType.PRICE_ABOVE
+                    ),
                     symbol=entry_order.symbol,
                     operator="<=",
                     target_value=stop_loss_price,
@@ -812,17 +829,23 @@ class OrderAutomationEngine:
                     order.expire_time.isoformat() if order.expire_time else None,
                     order.min_quantity,
                     order.display_quantity,
-                    json.dumps([asdict(c) for c in order.conditions])
-                    if order.conditions
-                    else None,
+                    (
+                        json.dumps([asdict(c) for c in order.conditions])
+                        if order.conditions
+                        else None
+                    ),
                     order.parent_order_id,
-                    json.dumps(order.child_order_ids)
-                    if order.child_order_ids
-                    else None,
+                    (
+                        json.dumps(order.child_order_ids)
+                        if order.child_order_ids
+                        else None
+                    ),
                     order.execution_algorithm,
-                    json.dumps(order.algorithm_params)
-                    if order.algorithm_params
-                    else None,
+                    (
+                        json.dumps(order.algorithm_params)
+                        if order.algorithm_params
+                        else None
+                    ),
                     order.status.value,
                     order.created_at.isoformat(),
                     order.updated_at.isoformat(),

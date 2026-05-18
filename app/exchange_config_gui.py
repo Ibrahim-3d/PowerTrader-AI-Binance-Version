@@ -3,6 +3,7 @@
 PowerTraderAI+ Exchange Configuration GUI
 GUI-based tool for setting up and managing cryptocurrency exchanges
 """
+
 import json
 import os
 import tkinter as tk

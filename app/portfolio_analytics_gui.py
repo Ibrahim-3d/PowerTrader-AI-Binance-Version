@@ -468,9 +468,11 @@ class PortfolioAnalyticsGUI:
             ax1 = self.performance_fig.add_subplot(gs[0, :])
             if performance.timestamps and performance.cumulative_returns:
                 dates = [
-                    datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                    if "Z" in ts
-                    else datetime.fromisoformat(ts)
+                    (
+                        datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                        if "Z" in ts
+                        else datetime.fromisoformat(ts)
+                    )
                     for ts in performance.timestamps
                 ]
                 ax1.plot(
@@ -715,9 +717,11 @@ class PortfolioAnalyticsGUI:
             for symbol, history in allocation_history.items():
                 if history:
                     dates = [
-                        datetime.fromisoformat(item[0].replace("Z", "+00:00"))
-                        if "Z" in item[0]
-                        else datetime.fromisoformat(item[0])
+                        (
+                            datetime.fromisoformat(item[0].replace("Z", "+00:00"))
+                            if "Z" in item[0]
+                            else datetime.fromisoformat(item[0])
+                        )
                         for item, _ in history
                     ]
                     percentages = [item[1] for _, item in history]

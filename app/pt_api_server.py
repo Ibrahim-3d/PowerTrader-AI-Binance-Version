@@ -119,9 +119,9 @@ class PowerTraderAPIServer:
 
                 return jsonify(
                     {
-                        "status": "healthy"
-                        if hub_accessible and status_fresh
-                        else "degraded",
+                        "status": (
+                            "healthy" if hub_accessible and status_fresh else "degraded"
+                        ),
                         "timestamp": datetime.utcnow().isoformat() + "Z",
                         "checks": {
                             "hub_data_directory": "ok" if hub_accessible else "error",
@@ -186,9 +186,9 @@ class PowerTraderAPIServer:
                             "market_value_usd": pos.get("market_value_usd"),
                             "average_cost": pos.get("average_cost"),
                             "pnl_percent": pos.get("gain_loss_pct"),
-                            "side": "long"
-                            if float(pos.get("quantity", 0)) > 0
-                            else "short",
+                            "side": (
+                                "long" if float(pos.get("quantity", 0)) > 0 else "short"
+                            ),
                         }
                     )
 

@@ -310,8 +310,7 @@ class AuditTrail:
                 cursor = conn.cursor()
 
                 # Audit events table
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS audit_events (
                         event_id TEXT PRIMARY KEY,
                         event_type TEXT NOT NULL,
@@ -330,12 +329,10 @@ class AuditTrail:
                         checksum TEXT NOT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
-                """
-                )
+                """)
 
                 # Compliance violations table
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS compliance_violations (
                         violation_id TEXT PRIMARY KEY,
                         rule_id TEXT NOT NULL,
@@ -348,12 +345,10 @@ class AuditTrail:
                         resolution_notes TEXT,
                         resolved_at TIMESTAMP
                     )
-                """
-                )
+                """)
 
                 # User sessions table
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS user_sessions (
                         session_id TEXT PRIMARY KEY,
                         user_id TEXT NOT NULL,
@@ -363,8 +358,7 @@ class AuditTrail:
                         user_agent TEXT,
                         active BOOLEAN DEFAULT TRUE
                     )
-                """
-                )
+                """)
 
                 conn.commit()
                 conn.close()
@@ -637,9 +631,11 @@ class ComplianceAuditSystem:
         # Log compliance check
         event = AuditEvent(
             event_id=str(uuid.uuid4()),
-            event_type=EventType.ORDER_CREATED
-            if status == ComplianceStatus.PASSED
-            else EventType.COMPLIANCE_VIOLATION,
+            event_type=(
+                EventType.ORDER_CREATED
+                if status == ComplianceStatus.PASSED
+                else EventType.COMPLIANCE_VIOLATION
+            ),
             timestamp=datetime.now(),
             user_id=user_id,
             session_id=session_id,
@@ -651,9 +647,9 @@ class ComplianceAuditSystem:
                 "violations": violations,
                 "status": status.value,
             },
-            risk_level=RiskLevel.HIGH
-            if status == ComplianceStatus.FAILED
-            else RiskLevel.LOW,
+            risk_level=(
+                RiskLevel.HIGH if status == ComplianceStatus.FAILED else RiskLevel.LOW
+            ),
             compliance_status=status,
         )
 

@@ -327,9 +327,11 @@ class TrailingProfitManager:
                 "min_profit_price": min_profit_price,
                 "trailing_amount": trailing_amount,
                 "trailing_percent": trailing_percent,
-                "min_profit_reached": current_price >= min_profit_price
-                if side.upper() == "SELL"
-                else current_price <= min_profit_price,
+                "min_profit_reached": (
+                    current_price >= min_profit_price
+                    if side.upper() == "SELL"
+                    else current_price <= min_profit_price
+                ),
                 "last_update": datetime.now(),
                 "max_profit_pct": self._calculate_profit_percentage(
                     entry_price, current_price, side

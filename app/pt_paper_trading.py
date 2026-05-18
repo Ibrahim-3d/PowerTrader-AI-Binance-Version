@@ -544,11 +544,11 @@ class PaperTradingAccount:
                     "current_price": float(pos.current_price),
                     "market_value": float(pos.market_value),
                     "unrealized_pnl": float(pos.unrealized_pnl),
-                    "unrealized_pnl_pct": float(
-                        pos.unrealized_pnl / pos.cost_basis * 100
-                    )
-                    if pos.cost_basis > 0
-                    else 0,
+                    "unrealized_pnl_pct": (
+                        float(pos.unrealized_pnl / pos.cost_basis * 100)
+                        if pos.cost_basis > 0
+                        else 0
+                    ),
                 }
                 for symbol, pos in self.positions.items()
             },
