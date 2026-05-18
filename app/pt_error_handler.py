@@ -54,8 +54,8 @@ class ApplicationErrorHandler:
     """
 
     _instance: Optional["ApplicationErrorHandler"] = None
-    _class_lock = threading.Lock()     # Guards singleton creation
-    _init_lock = threading.Lock()      # Guards lazy initialisation
+    _class_lock = threading.Lock()  # Guards singleton creation
+    _init_lock = threading.Lock()  # Guards lazy initialisation
 
     def __new__(cls) -> "ApplicationErrorHandler":
         with cls._class_lock:
@@ -69,7 +69,7 @@ class ApplicationErrorHandler:
         if self._initialised:
             return
         with self._init_lock:
-            if self._initialised:   # re-check after acquiring lock
+            if self._initialised:  # re-check after acquiring lock
                 return
             self._handler = ErrorHandler(logger=logging.getLogger("pt.errors"))
             self._callbacks: Dict[ErrorSeverity, List[NotificationCallback]] = {
@@ -195,7 +195,8 @@ class ApplicationErrorHandler:
     def get_critical_errors(self) -> List[ErrorReport]:
         self._ensure_init()
         return [
-            r for r in self._handler.error_reports
+            r
+            for r in self._handler.error_reports
             if r.severity == ErrorSeverity.CRITICAL
         ]
 

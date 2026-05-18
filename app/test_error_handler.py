@@ -16,7 +16,6 @@ from pt_errors import ErrorSeverity, TradingError, ErrorCategory
 
 
 class TestApplicationErrorHandlerSingleton(unittest.TestCase):
-
     def setUp(self):
         ApplicationErrorHandler.reset_singleton()
 
@@ -34,7 +33,6 @@ class TestApplicationErrorHandlerSingleton(unittest.TestCase):
 
 
 class TestErrorHandling(unittest.TestCase):
-
     def setUp(self):
         ApplicationErrorHandler.reset_singleton()
 
@@ -92,7 +90,6 @@ class TestErrorHandling(unittest.TestCase):
 
 
 class TestCallbacks(unittest.TestCase):
-
     def setUp(self):
         ApplicationErrorHandler.reset_singleton()
 
@@ -132,6 +129,7 @@ class TestCallbacks(unittest.TestCase):
     def test_callback_exception_does_not_propagate(self):
         def bad_cb(report):
             raise RuntimeError("callback exploded")
+
         on_critical(bad_cb)
         try:
             get_handler().handle_critical(ValueError("test"))
@@ -150,7 +148,7 @@ class TestCallbacks(unittest.TestCase):
         cb_high = MagicMock()
         on_critical(cb_crit)
         on_error(cb_high)
-        get_handler().unregister_all()   # no argument → all
+        get_handler().unregister_all()  # no argument → all
         get_handler().handle_critical(ValueError("x"))
         try:
             raise TradingError("y", severity=ErrorSeverity.HIGH)
@@ -173,7 +171,7 @@ class TestCallbacks(unittest.TestCase):
 
         def patched_handle_error(error, context=None):
             report = original_handle_error(error, context=context)
-            report.module = "pt_trader"   # simulate origin in suppressed module
+            report.module = "pt_trader"  # simulate origin in suppressed module
             return report
 
         get_handler()._handler.handle_error = patched_handle_error
@@ -187,7 +185,6 @@ class TestCallbacks(unittest.TestCase):
 
 
 class TestQueryAPI(unittest.TestCase):
-
     def setUp(self):
         ApplicationErrorHandler.reset_singleton()
 
@@ -229,7 +226,6 @@ class TestQueryAPI(unittest.TestCase):
 
 
 class TestConfigureGuiAlerts(unittest.TestCase):
-
     def setUp(self):
         ApplicationErrorHandler.reset_singleton()
 
