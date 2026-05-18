@@ -208,19 +208,212 @@ class BinanceExchange(AbstractExchange):
             exchange="binance",
         )
 
+    # ------------------------------------------------------------------
+    # Authenticated helpers
+    # ------------------------------------------------------------------
+
+    def _sign(self, params: str) -> str:
+        """Generate HMAC-SHA256 signature for Binance signed endpoints."""
+        return hmac.new(
+            self.api_secret.encode("utf-8"),
+            params.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+    def _signed_request(
+        self, method: str, path: str, params: Optional[Dict] = None
+    ) -> Dict:
+        """
+        Make a signed request to a Binance private endpoint.
+
+        Appends timestamp and HMAC-SHA256 signature before sending.
+
+        Raises:
+            RuntimeError: on Binance API error (negative code field)
+            requests.RequestException: on network failure
+        """
+        params = params or {}
+        params["timestamp"] = int(time.time() * 1000)
+        query = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
+        signature = self._sign(query)
+        query += f"&signature={signature}"
+
+        url = f"{self.base_url}{path}?{query}"
+        headers = {"X-MBX-APIKEY": self.api_key}
+
+        resp_map = {
+            "GET": requests.get,
+            "POST": requests.post,
+            "DELETE": requests.delete,
+        }
+        send = resp_map.get(method.upper())
+        if send is None:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+
+        response = send(url, headers=headers, timeout=10)
+        data = response.json()
+        if isinstance(data, dict) and "code" in data and data["code"] < 0:
+            raise RuntimeError(f"Binance API error {data['code']}: {data.get('msg', '')}")
+        return data
+
+    # ------------------------------------------------------------------
+    # AbstractExchange implementation
+    # ------------------------------------------------------------------
+
     def place_order(
         self, symbol: str, side: str, amount: float, price: Optional[float] = None
     ) -> OrderResult:
-        raise NotImplementedError("Binance order placement to be implemented")
+        """
+        Place a market or limit order on Binance via POST /api/v3/order.
+
+        Args:
+            symbol: Standard format e.g. 'BTC-USD' (converted to BTCUSDT)
+            side: 'buy' or 'sell'
+            amount: Quantity of base asset
+            price: Limit price; None for market order
+
+        Returns:
+            OrderResult. order_id uses 'SYMBOL:ID' format for later lookup.
+
+        Raises:
+            RuntimeError: on missing credentials or API error
+        """
+        if not self.api_key or not self.api_secret:
+            raise RuntimeError("Binance API credentials required for order placement")
+
+        binance_symbol = self._convert_symbol(symbol)
+        order_type = "LIMIT" if price is not None else "MARKET"
+
+        params: Dict = {
+            "symbol": binance_symbol,
+            "side": side.upper(),
+            "type": order_type,
+            "quantity": f"{amount:.8f}",
+        }
+        if order_type == "LIMIT":
+            params["price"] = f"{price:.8f}"
+            params["timeInForce"] = "GTC"
+
+        data = self._signed_request("POST", "/api/v3/order", params)
+
+        # Prefix order_id with symbol so get_order_status/cancel_order can use it
+        compound_id = f"{binance_symbol}:{data['orderId']}"
+
+        return OrderResult(
+            order_id=compound_id,
+            symbol=symbol,
+            side=side.lower(),
+            amount=float(data.get("executedQty", amount)),
+            price=float(data.get("price", price or 0)),
+            status=data.get("status", "UNKNOWN").lower(),
+            exchange="binance",
+            timestamp=data.get("transactTime", time.time() * 1000) / 1000,
+        )
 
     def get_balance(self) -> Dict[str, float]:
-        raise NotImplementedError("Binance balance retrieval to be implemented")
+        """
+        Retrieve balances for all assets via GET /api/v3/account.
+
+        Returns:
+            Dict mapping asset symbol to free (spendable) balance.
+            Only assets with free > 0 OR locked > 0 are included.
+
+        Raises:
+            RuntimeError: on missing credentials or API error
+        """
+        if not self.api_key or not self.api_secret:
+            raise RuntimeError("Binance API credentials required for balance retrieval")
+
+        data = self._signed_request("GET", "/api/v3/account")
+
+        return {
+            b["asset"]: float(b["free"])
+            for b in data.get("balances", [])
+            if float(b["free"]) > 0 or float(b["locked"]) > 0
+        }
 
     def get_order_status(self, order_id: str) -> OrderResult:
-        raise NotImplementedError("Binance order status to be implemented")
+        """
+        Get status of an existing order via GET /api/v3/order.
+
+        Args:
+            order_id: 'SYMBOL:NUMERIC_ID' as returned by place_order
+                      e.g. 'BTCUSDT:123456789'
+
+        Returns:
+            OrderResult with current status
+
+        Raises:
+            RuntimeError: on missing credentials or API error
+            ValueError: if order_id not in 'SYMBOL:ID' format
+        """
+        if not self.api_key or not self.api_secret:
+            raise RuntimeError("Binance API credentials required for order status")
+
+        if ":" not in str(order_id):
+            raise ValueError(
+                "Binance order lookup requires 'SYMBOL:ORDER_ID' format "
+                "(as returned by place_order). Got: " + str(order_id)
+            )
+
+        binance_symbol, numeric_id = str(order_id).split(":", 1)
+
+        data = self._signed_request(
+            "GET",
+            "/api/v3/order",
+            {"symbol": binance_symbol, "orderId": int(numeric_id)},
+        )
+
+        symbol = binance_symbol.replace("USDT", "-USD")
+
+        return OrderResult(
+            order_id=order_id,
+            symbol=symbol,
+            side=data["side"].lower(),
+            amount=float(data.get("executedQty", 0)),
+            price=float(data.get("price", 0)),
+            status=data.get("status", "UNKNOWN").lower(),
+            exchange="binance",
+            timestamp=data.get("time", time.time() * 1000) / 1000,
+        )
 
     def cancel_order(self, order_id: str) -> bool:
-        raise NotImplementedError("Binance order cancellation to be implemented")
+        """
+        Cancel an open order via DELETE /api/v3/order.
+
+        Args:
+            order_id: 'SYMBOL:NUMERIC_ID' as returned by place_order
+
+        Returns:
+            True if successfully cancelled.
+            False if order already filled or unknown (error -2011).
+
+        Raises:
+            RuntimeError: on missing credentials or unexpected API error
+            ValueError: if order_id not in 'SYMBOL:ID' format
+        """
+        if not self.api_key or not self.api_secret:
+            raise RuntimeError("Binance API credentials required for order cancellation")
+
+        if ":" not in str(order_id):
+            raise ValueError(
+                "Binance cancel requires 'SYMBOL:ORDER_ID' format. Got: " + str(order_id)
+            )
+
+        binance_symbol, numeric_id = str(order_id).split(":", 1)
+
+        try:
+            data = self._signed_request(
+                "DELETE",
+                "/api/v3/order",
+                {"symbol": binance_symbol, "orderId": int(numeric_id)},
+            )
+            return data.get("status") in ("CANCELED", "CANCELLED")
+        except RuntimeError as exc:
+            if "-2011" in str(exc):
+                # Order unknown: already filled or previously cancelled
+                return False
+            raise
 
     def is_available_in_region(self, region: str) -> bool:
         return True  # Available globally (check local regulations)
