@@ -8120,9 +8120,9 @@ Platform: {sys.platform}
                     if len(raw) == 64:
                         raw = raw[:32]
                         priv_b64 = base64.b64encode(raw).decode("utf-8")
-                        private_b64_state["value"] = (
-                            priv_b64  # keep UI state consistent
-                        )
+                        private_b64_state[
+                            "value"
+                        ] = priv_b64  # keep UI state consistent
                     elif len(raw) != 32:
                         messagebox.showerror(
                             "Bad private key",
@@ -8451,9 +8451,9 @@ Platform: {sys.platform}
                 self.settings["auto_best_price"] = bool(auto_best_price_var.get())
 
                 self.settings["script_neural_runner2"] = neural_script_var.get().strip()
-                self.settings["script_neural_trainer"] = (
-                    trainer_script_var.get().strip()
-                )
+                self.settings[
+                    "script_neural_trainer"
+                ] = trainer_script_var.get().strip()
                 self.settings["script_trader"] = trader_script_var.get().strip()
 
                 self.settings["ui_refresh_seconds"] = float(
