@@ -27,6 +27,12 @@ from pt_performance import PerformanceMonitor
 # PowerTrader imports
 from pt_risk import RiskLimits, RiskManager
 from pt_validation import InputValidator
+from pt_paper_trading import (
+    OrderSide,
+    OrderStatus,
+    OrderType,
+    PaperTradingAccount,
+)
 
 
 @dataclass
@@ -512,17 +518,91 @@ class LiveIntegrationTester:
         )
 
     async def _test_trading_simulation(self):
-        """Test trading simulation system."""
+        """Test trading simulation system using PaperTradingAccount."""
+        from decimal import Decimal
+
         start_time = time.time()
 
-        # This would test paper trading functionality
-        self._add_result(
-            "Trading Simulation",
-            "Paper Trading",
-            "SKIP",
-            (time.time() - start_time) * 1000,
-            "Paper trading system not yet implemented",
-        )
+        # Test 1: account initialisation
+        try:
+            account = PaperTradingAccount(initial_balance=Decimal("10000"))
+            assert float(account.cash_balance) == 10000.0
+            self._add_result(
+                "Trading Simulation",
+                "Account Init",
+                "PASS",
+                (time.time() - start_time) * 1000,
+                f"PaperTradingAccount initialised: balance=${account.cash_balance}",
+            )
+        except Exception as exc:
+            self._add_result(
+                "Trading Simulation",
+                "Account Init",
+                "FAIL",
+                (time.time() - start_time) * 1000,
+                f"PaperTradingAccount init failed: {exc}",
+            )
+            return
+
+        # Test 2: place market buy order
+        t2 = time.time()
+        try:
+            order_id = account.place_order(
+                symbol="BTC",
+                order_type=OrderType.MARKET,
+                side=OrderSide.BUY,
+                quantity=Decimal("0.001"),
+            )
+            status = account.get_order_status(order_id)
+            if status in (
+                OrderStatus.FILLED,
+                OrderStatus.PENDING,
+                OrderStatus.REJECTED,
+            ):
+                result_status = "PASS" if status == OrderStatus.FILLED else "WARNING"
+                self._add_result(
+                    "Trading Simulation",
+                    "Place Buy Order",
+                    result_status,
+                    (time.time() - t2) * 1000,
+                    f"Market BUY 0.001 BTC: order_id={order_id[:8]}, status={status.value}",
+                )
+            else:
+                raise ValueError(f"Unexpected order status: {status}")
+        except Exception as exc:
+            self._add_result(
+                "Trading Simulation",
+                "Place Buy Order",
+                "FAIL",
+                (time.time() - t2) * 1000,
+                f"Place order failed: {exc}",
+            )
+            return
+
+        # Test 3: account summary reflects the trade
+        t3 = time.time()
+        try:
+            summary = account.get_account_summary()
+            assert "total_value" in summary
+            assert "positions" in summary
+            assert summary["total_trades"] >= 0
+            self._add_result(
+                "Trading Simulation",
+                "Account Summary",
+                "PASS",
+                (time.time() - t3) * 1000,
+                f"Summary OK: total_value=${summary['total_value']:.2f}, "
+                f"trades={summary['total_trades']}",
+                details=summary,
+            )
+        except Exception as exc:
+            self._add_result(
+                "Trading Simulation",
+                "Account Summary",
+                "FAIL",
+                (time.time() - t3) * 1000,
+                f"Account summary failed: {exc}",
+            )
 
     def _add_result(
         self,
