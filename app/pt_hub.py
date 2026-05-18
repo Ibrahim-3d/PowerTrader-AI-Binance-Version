@@ -7486,15 +7486,19 @@ Platform: {sys.platform}
 
         def _read_api_files() -> Tuple[str, str]:
             # Try encrypted vault first, then fall back to plaintext
+            import logging as _log
             from pt_credentials import SecureCredentialManager as _SCM
             _mgr = _SCM(self.project_dir)
-            try:
-                creds = _mgr.decrypt_credentials()
-                if creds:
-                    return creds[0], creds[1]
-            except Exception:
-                pass
-            # Plaintext fallback for legacy / migration path
+            if _mgr.has_encrypted_credentials():
+                try:
+                    creds = _mgr.decrypt_credentials()
+                    if creds:
+                        return creds[0], creds[1]
+                except Exception as _e:
+                    _log.getLogger(__name__).debug(
+                        "Encrypted vault read failed, falling back to plaintext: %s", _e
+                    )
+            # Plaintext fallback for legacy installs
             key_path, secret_path = _api_paths()
             try:
                 with open(key_path, "r", encoding="utf-8") as f:
@@ -8178,6 +8182,14 @@ Platform: {sys.platform}
                         f"Couldn't save credentials.\n\nError:\n{e}",
                     )
                     return
+
+                # Remove stale plaintext files so they cannot be read later
+                for _stale in (key_path, secret_path):
+                    try:
+                        if os.path.isfile(_stale):
+                            os.remove(_stale)
+                    except Exception:
+                        pass
 
                 _refresh_api_status()
                 messagebox.showinfo(
