@@ -6,8 +6,8 @@ import tempfile
 import time
 import unittest
 
-from pt_backup import BackupRecord, DatabaseBackupManager
-from pt_validation import DataCorruptionError, DataIntegrityValidator, ValidationError
+from pt_backup import DatabaseBackupManager
+from pt_validation import DataIntegrityValidator
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +69,9 @@ class TestDatabaseBackupManager(unittest.TestCase):
         self.assertEqual(len(records), 2)
 
     def test_list_backups_sorted_oldest_first(self):
-        r1 = self.mgr.create_backup()
+        self.mgr.create_backup()
         time.sleep(0.01)
-        r2 = self.mgr.create_backup()
+        self.mgr.create_backup()
         records = self.mgr.list_backups()
         self.assertLessEqual(records[0].created_at, records[1].created_at)
 

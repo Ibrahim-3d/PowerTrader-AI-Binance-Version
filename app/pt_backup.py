@@ -10,7 +10,6 @@ import logging
 import os
 import shutil
 import sqlite3
-import tempfile
 import threading
 import time
 from dataclasses import dataclass, asdict

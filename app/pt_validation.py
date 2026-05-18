@@ -8,7 +8,7 @@ import json
 import math
 import re
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 
 class ValidationError(Exception):
