@@ -102,12 +102,19 @@ class TestPaperTradingIntegration(unittest.TestCase):
         self.assertEqual(self.account.get_order_status(order_id), OrderStatus.CANCELLED)
 
     def test_oversized_order_rejected(self):
-        """Order exceeding risk limits (10% portfolio) should be rejected."""
+        """Order exceeding risk limits (>10% of $10k portfolio) should be rejected."""
+        # Derive a quantity that always exceeds 10% of portfolio regardless of price
+        # 10% of $10,000 = $1,000 max; BTC is always > $1k, so 10 BTC always fails
+        from pt_paper_trading import MarketDataSimulator
+
+        btc_price = float(MarketDataSimulator().get_current_price("BTC"))
+        # 5x the portfolio value worth of BTC - always rejected
+        excessive_qty = Decimal(str(round(50000.0 / btc_price, 4)))
         order_id = self.account.place_order(
             symbol="BTC",
             order_type=OrderType.MARKET,
             side=OrderSide.BUY,
-            quantity=Decimal("10"),  # ~$450k, far exceeds $1000 limit
+            quantity=excessive_qty,
         )
         self.assertEqual(self.account.get_order_status(order_id), OrderStatus.REJECTED)
 
@@ -117,12 +124,10 @@ class TestPaperTradingIntegration(unittest.TestCase):
 
         # Import integration tester
         try:
-            from pt_integration import IntegrationTester
+            from pt_integration import LiveIntegrationTester
 
-            tester = IntegrationTester()
-            asyncio.get_event_loop().run_until_complete(
-                tester._test_trading_simulation()
-            )
+            tester = LiveIntegrationTester()
+            asyncio.run(tester._test_trading_simulation())
             statuses = [r.status for r in tester.test_results]
             # Should not have any SKIP results
             self.assertNotIn("SKIP", statuses)

@@ -33,6 +33,7 @@ from pt_paper_trading import (
     OrderType,
     PaperTradingAccount,
 )
+from decimal import Decimal  # noqa: E402
 
 
 @dataclass
@@ -519,8 +520,6 @@ class LiveIntegrationTester:
 
     async def _test_trading_simulation(self):
         """Test trading simulation system using PaperTradingAccount."""
-        from decimal import Decimal
-
         start_time = time.time()
 
         # Test 1: account initialisation
@@ -559,13 +558,13 @@ class LiveIntegrationTester:
                 OrderStatus.PENDING,
                 OrderStatus.REJECTED,
             ):
-                result_status = "PASS" if status == OrderStatus.FILLED else "WARNING"
+                result_status = "PASS" if status == OrderStatus.FILLED else "FAIL"
                 self._add_result(
                     "Trading Simulation",
                     "Place Buy Order",
                     result_status,
                     (time.time() - t2) * 1000,
-                    f"Market BUY 0.001 BTC: order_id={order_id[:8]}, status={status.value}",
+                    f"Market BUY 0.001 BTC: order_id={str(order_id)[:8]}, status={status.value}",
                 )
             else:
                 raise ValueError(f"Unexpected order status: {status}")
