@@ -420,10 +420,13 @@ class PowerTraderTestSuite:
 
         except Exception as e:
             # Even exceptions should be handled gracefully
-            if any(
-                kw in str(e).lower()
-                for kw in ("credentials", "api key", "unauthorized", "forbidden")
-            ):
+            auth_error_keywords = (
+                "credentials",
+                "api key",
+                "unauthorized",
+                "forbidden",
+            )
+            if any(kw in str(e).lower() for kw in auth_error_keywords):
                 self.log_test(
                     "Missing credentials handling",
                     True,
