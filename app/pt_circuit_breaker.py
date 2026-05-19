@@ -132,6 +132,15 @@ class CircuitBreaker:
             )
         return self._state
 
+    def _effective_state(self) -> CircuitState:
+        """Pure observer: compute effective state without mutating (for stats/monitoring)."""
+        if (
+            self._state == CircuitState.OPEN
+            and time.time() >= self._open_at + self.timeout
+        ):
+            return CircuitState.HALF_OPEN
+        return self._state
+
     def _on_success(self) -> None:
         with self._lock:
             state = self._resolve_state()
@@ -160,6 +169,10 @@ class CircuitBreaker:
                     state == CircuitState.HALF_OPEN
                     or self._stats.failure_count >= self.failure_threshold
                 ):
+                    if state == CircuitState.HALF_OPEN:
+                        # Reset counts so failure_count=1 (this failure) when re-opening
+                        self._stats.failure_count = 1
+                        self._half_open_successes = 0
                     self._state = CircuitState.OPEN
                     self._open_at = time.time()
                     logger.warning(
@@ -204,7 +217,7 @@ class CircuitBreaker:
         with self._lock:
             return {
                 "name": self.name,
-                "state": self._resolve_state().value,
+                "state": self._effective_state().value,
                 "stats": self._stats.to_dict(),
                 "config": {
                     "failure_threshold": self.failure_threshold,

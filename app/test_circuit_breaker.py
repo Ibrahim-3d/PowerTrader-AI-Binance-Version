@@ -12,6 +12,11 @@ from pt_circuit_breaker import (
 )
 
 
+def _raise(exc):
+    """Helper: raise exc — cleaner than lambda generator-throw pattern."""
+    raise exc
+
+
 class TestCircuitBreakerBasic(unittest.TestCase):
     def setUp(self):
         self.cb = CircuitBreaker(
@@ -28,13 +33,13 @@ class TestCircuitBreakerBasic(unittest.TestCase):
     def test_opens_after_threshold_failures(self):
         for _ in range(3):
             with self.assertRaises(ValueError):
-                self.cb.call(lambda: (_ for _ in ()).throw(ValueError("fail")))
+                self.cb.call(_raise, ValueError("fail"))
         self.assertEqual(self.cb.state, CircuitState.OPEN)
 
     def test_rejects_when_open(self):
         for _ in range(3):
             try:
-                self.cb.call(lambda: (_ for _ in ()).throw(ValueError("fail")))
+                self.cb.call(_raise, ValueError("fail"))
             except ValueError:
                 pass
         with self.assertRaises(CircuitBreakerError):
@@ -43,7 +48,7 @@ class TestCircuitBreakerBasic(unittest.TestCase):
     def test_half_open_after_timeout(self):
         for _ in range(3):
             try:
-                self.cb.call(lambda: (_ for _ in ()).throw(ValueError()))
+                self.cb.call(_raise, ValueError())
             except ValueError:
                 pass
         time.sleep(0.15)
@@ -52,7 +57,7 @@ class TestCircuitBreakerBasic(unittest.TestCase):
     def test_recovers_to_closed_after_successes(self):
         for _ in range(3):
             try:
-                self.cb.call(lambda: (_ for _ in ()).throw(ValueError()))
+                self.cb.call(_raise, ValueError())
             except ValueError:
                 pass
         time.sleep(0.15)
@@ -63,20 +68,36 @@ class TestCircuitBreakerBasic(unittest.TestCase):
     def test_reopens_on_failure_in_half_open(self):
         for _ in range(3):
             try:
-                self.cb.call(lambda: (_ for _ in ()).throw(ValueError()))
+                self.cb.call(_raise, ValueError())
             except ValueError:
                 pass
         time.sleep(0.15)
         try:
-            self.cb.call(lambda: (_ for _ in ()).throw(ValueError()))
+            self.cb.call(_raise, ValueError())
         except ValueError:
             pass
         self.assertEqual(self.cb.state, CircuitState.OPEN)
 
+    def test_failure_count_reset_on_half_open_reopen(self):
+        """failure_count should be 1 (not cumulative) when HALF_OPEN → OPEN."""
+        for _ in range(3):
+            try:
+                self.cb.call(_raise, ValueError())
+            except ValueError:
+                pass
+        time.sleep(0.15)
+        try:
+            self.cb.call(_raise, ValueError())
+        except ValueError:
+            pass
+        stats = self.cb.get_stats()
+        # Re-opened by exactly one failure from HALF_OPEN
+        self.assertEqual(stats["stats"]["failure_count"], 1)
+
     def test_manual_reset(self):
         for _ in range(3):
             try:
-                self.cb.call(lambda: (_ for _ in ()).throw(ValueError()))
+                self.cb.call(_raise, ValueError())
             except ValueError:
                 pass
         self.cb.reset()
@@ -86,7 +107,7 @@ class TestCircuitBreakerBasic(unittest.TestCase):
         """Successes reset the failure streak while CLOSED."""
         for _ in range(2):
             try:
-                self.cb.call(lambda: (_ for _ in ()).throw(ValueError()))
+                self.cb.call(_raise, ValueError())
             except ValueError:
                 pass
         self.cb.call(lambda: True)  # success resets failure_count
@@ -94,10 +115,26 @@ class TestCircuitBreakerBasic(unittest.TestCase):
         # Need full threshold again to open
         for _ in range(3):
             try:
-                self.cb.call(lambda: (_ for _ in ()).throw(ValueError()))
+                self.cb.call(_raise, ValueError())
             except ValueError:
                 pass
         self.assertEqual(self.cb.state, CircuitState.OPEN)
+
+    def test_get_stats_does_not_mutate_state(self):
+        """get_stats() must not cause OPEN → HALF_OPEN transition as a side effect."""
+        for _ in range(3):
+            try:
+                self.cb.call(_raise, ValueError())
+            except ValueError:
+                pass
+        self.assertEqual(self.cb._state, CircuitState.OPEN)
+        # Manipulate open_at so timeout appears elapsed
+        self.cb._open_at = time.time() - self.cb.timeout - 1
+        # Reading stats must NOT mutate internal state
+        stats = self.cb.get_stats()
+        self.assertEqual(self.cb._state, CircuitState.OPEN)  # still OPEN internally
+        # But the reported effective state reflects the timeout elapsed
+        self.assertEqual(stats["state"], CircuitState.HALF_OPEN.value)
 
 
 class TestCircuitBreakerDecorator(unittest.TestCase):
@@ -153,7 +190,7 @@ class TestCircuitBreakerRegistry(unittest.TestCase):
     def test_health_summary_with_open_circuit(self):
         cb = registry.register("health_test", failure_threshold=1, timeout=60)
         try:
-            cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
+            cb.call(_raise, RuntimeError())
         except RuntimeError:
             pass
         health = registry.get_health_summary()
@@ -168,7 +205,7 @@ class TestCircuitBreakerRegistry(unittest.TestCase):
     def test_reset_all(self):
         cb = registry.register("reset_test", failure_threshold=1, timeout=60)
         try:
-            cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
+            cb.call(_raise, RuntimeError())
         except RuntimeError:
             pass
         self.assertEqual(cb.state, CircuitState.OPEN)
@@ -182,7 +219,7 @@ class TestCircuitBreakerStats(unittest.TestCase):
         cb = CircuitBreaker("stats_test_isolated", failure_threshold=10, timeout=60)
         cb.call(lambda: True)
         try:
-            cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
+            cb.call(_raise, RuntimeError())
         except RuntimeError:
             pass
         stats = cb.get_stats()
@@ -194,7 +231,7 @@ class TestCircuitBreakerStats(unittest.TestCase):
         cb = CircuitBreaker("reject_test_isolated", failure_threshold=2, timeout=60)
         for _ in range(2):
             try:
-                cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
+                cb.call(_raise, RuntimeError())
             except RuntimeError:
                 pass
         try:
@@ -210,7 +247,7 @@ class TestCircuitBreakerStats(unittest.TestCase):
         )
         for _ in range(2):
             try:
-                cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
+                cb.call(_raise, RuntimeError())
             except RuntimeError:
                 pass
         time.sleep(0.08)
