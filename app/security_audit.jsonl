@@ -1,0 +1,1 @@
+{"event_id": "SEC_20260517_234757_9ca0844e", "event_type": "auth_success", "timestamp": 1779050877.014233, "message": "API auth succeeded for robinhood", "correlation_id": null, "source": "robinhood", "user_id": null, "source_ip": null, "success": true, "details": null}
