@@ -292,6 +292,14 @@ class SecureCredentialManager:
             backup_meta = self.metadata_file + ".bak"
             backed_up = False
 
+            # Snapshot created_at before rotation so it is never silently reset.
+            # encrypt_credentials() constructs new metadata (resetting created_at)
+            # when the metadata file is missing or corrupt at rotation time.
+            prior_created_at: Optional[float] = None
+            prior_meta = self._load_metadata()
+            if prior_meta is not None:
+                prior_created_at = prior_meta.created_at
+
             try:
                 if self.has_encrypted_credentials():
                     shutil.copy2(self.encrypted_key_file, backup_key)
@@ -303,6 +311,13 @@ class SecureCredentialManager:
                 if self.encrypt_credentials(
                     new_api_key, new_private_key_b64, rotation_interval_days
                 ):
+                    # Restore original created_at if encrypt_credentials reset it
+                    if prior_created_at is not None:
+                        meta = self._load_metadata()
+                        if meta is not None and meta.created_at != prior_created_at:
+                            meta.created_at = prior_created_at
+                            self._save_metadata(meta)
+
                     for f in (backup_key, backup_secret, backup_meta):
                         try:
                             os.remove(f)
@@ -317,10 +332,11 @@ class SecureCredentialManager:
                 logger.error("Credential rotation failed: %s", exc)
                 if backed_up:
                     try:
-                        shutil.copy2(backup_key, self.encrypted_key_file)
-                        shutil.copy2(backup_secret, self.encrypted_secret_file)
+                        # os.replace is atomic (POSIX rename): no partial-restore window
+                        os.replace(backup_key, self.encrypted_key_file)
+                        os.replace(backup_secret, self.encrypted_secret_file)
                         if os.path.exists(backup_meta):
-                            shutil.copy2(backup_meta, self.metadata_file)
+                            os.replace(backup_meta, self.metadata_file)
                         logger.info("Rolled back to previous credentials")
                     except OSError as restore_exc:
                         logger.critical(
