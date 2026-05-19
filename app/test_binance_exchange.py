@@ -2,6 +2,7 @@
 Tests for BinanceExchange authenticated order execution - issue #85.
 All tests mock HTTP calls; no real Binance API credentials required.
 """
+
 import hashlib
 import hmac
 import unittest
