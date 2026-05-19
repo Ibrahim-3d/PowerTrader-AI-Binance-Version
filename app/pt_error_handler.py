@@ -18,10 +18,11 @@ Usage:
 
     # Or via the global handler directly
     handler = get_handler()
-    handler.handle_error(exc)
+    handler.handle(exc)
 """
 
 import logging
+import sys
 import threading
 from typing import Callable, Dict, List, Optional
 
@@ -109,11 +110,13 @@ class ApplicationErrorHandler:
     def suppress_module(self, module_name: str) -> None:
         """Suppress notification callbacks for errors from `module_name`."""
         self._ensure_init()
-        self._suppressed_modules.add(module_name)
+        with self._cb_lock:
+            self._suppressed_modules.add(module_name)
 
     def unsuppress_module(self, module_name: str) -> None:
         self._ensure_init()
-        self._suppressed_modules.discard(module_name)
+        with self._cb_lock:
+            self._suppressed_modules.discard(module_name)
 
     # ------------------------------------------------------------------
     # Core handle
@@ -139,6 +142,13 @@ class ApplicationErrorHandler:
         report = self._handler.handle_error(error, context=context)
         self._fire_callbacks(report)
         if reraise:
+            # If error is the currently active exception (called from inside an except
+            # block), bare raise preserves the original traceback exactly.
+            # Otherwise fall back to raise error which uses the traceback already
+            # attached to the exception object.
+            _, active_exc, _ = sys.exc_info()
+            if active_exc is error:
+                raise
             raise error
         return report
 
@@ -158,9 +168,13 @@ class ApplicationErrorHandler:
         report = self._handler.handle_error(error, context=context)
 
         if report.severity != ErrorSeverity.CRITICAL:
-            # Update the stored report so stats and `get_critical_errors()` agree
+            original_severity = report.severity
+            # Update the stored report so stats and get_critical_errors() agree
             report.severity = ErrorSeverity.CRITICAL
-            # Also update the in-place error_counts to include CRITICAL
+            # Move the count from original severity to CRITICAL - no double-counting
+            orig_key = original_severity.value
+            if self._handler.error_counts.get(orig_key, 0) > 0:
+                self._handler.error_counts[orig_key] -= 1
             self._handler.error_counts[ErrorSeverity.CRITICAL.value] = (
                 self._handler.error_counts.get(ErrorSeverity.CRITICAL.value, 0) + 1
             )
@@ -170,9 +184,9 @@ class ApplicationErrorHandler:
 
     def _fire_callbacks(self, report: ErrorReport) -> None:
         self._ensure_init()
-        if report.module in self._suppressed_modules:
-            return
         with self._cb_lock:
+            if report.module in self._suppressed_modules:
+                return
             callbacks = list(self._callbacks.get(report.severity, []))
         for cb in callbacks:
             try:
