@@ -3,6 +3,7 @@ Credential storage audit tests - issue #52.
 Verifies no direct plaintext file reads/writes to r_key.txt / r_secret.txt
 exist outside of pt_credentials.py (the authorised migration module).
 """
+
 import ast
 import os
 import sys
