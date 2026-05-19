@@ -6,7 +6,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from pt_database_manager import (
     DatabaseConnectionPool,
@@ -159,17 +159,37 @@ class TestAtomicTransaction(unittest.TestCase):
         # Create a second connection that holds a write lock
         blocker = sqlite3.connect(self.db, isolation_level=None)
         blocker.execute("BEGIN EXCLUSIVE")
+        victim = sqlite3.connect(self.db, timeout=0.01, isolation_level=None)
         try:
             with self.assertRaises(TransactionError):
-                with atomic_transaction(
-                    sqlite3.connect(self.db, timeout=0.01, isolation_level=None),
-                    max_retries=1,
-                    base_delay=0.01,
-                ) as c:
+                with atomic_transaction(victim, max_retries=1, base_delay=0.01) as c:
                     c.execute("INSERT INTO t VALUES (99, 'blocked')")
         finally:
             blocker.execute("ROLLBACK")
             blocker.close()
+            victim.close()
+
+    def test_commit_contention_retries(self):
+        """SQLITE_BUSY on COMMIT should trigger retry, not silently fail."""
+        call_count = {"n": 0}
+        orig_execute = self.conn.execute
+
+        def patched_execute(sql, *args, **kwargs):
+            if sql == "COMMIT":
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    # Simulate COMMIT contention on first attempt
+                    raise sqlite3.OperationalError("database is locked")
+            return orig_execute(sql, *args, **kwargs)
+
+        with patch.object(self.conn, "execute", side_effect=patched_execute):
+            with atomic_transaction(self.conn, max_retries=2, base_delay=0.01) as c:
+                orig_execute("INSERT INTO t VALUES (77, 'commit_retry')")
+
+        # Row should be committed on the second COMMIT attempt
+        row = self.conn.execute("SELECT val FROM t WHERE id=77").fetchone()
+        self.assertEqual(row[0], "commit_retry")
+        self.assertGreater(call_count["n"], 1, "COMMIT should have been retried")
 
 
 class TestInputSanitizer(unittest.TestCase):
@@ -192,6 +212,20 @@ class TestInputSanitizer(unittest.TestCase):
 
     def test_check_sql_injection_clean(self):
         self.assertFalse(InputSanitizer.check_sql_injection("BTC-USD"))
+
+    def test_check_sql_injection_no_false_positives(self):
+        """Words containing SQL keywords as substrings must not trigger detection."""
+        safe_values = ["dropbox", "selection", "truncate_me", "executor", "unionist"]
+        for val in safe_values:
+            self.assertFalse(
+                InputSanitizer.check_sql_injection(val),
+                f"False positive on safe value: {val!r}",
+            )
+
+    def test_check_sql_injection_punctuation_tokens(self):
+        """Punctuation injection tokens (-- ;) must still be detected."""
+        self.assertTrue(InputSanitizer.check_sql_injection("value; comment"))
+        self.assertTrue(InputSanitizer.check_sql_injection("value -- comment"))
 
     def test_safe_identifier_valid(self):
         self.assertEqual(InputSanitizer.safe_identifier("orders"), "orders")

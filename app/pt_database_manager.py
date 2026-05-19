@@ -93,7 +93,10 @@ class DatabaseConnectionPool:
                 conn = sqlite3.connect(
                     self.db_path,
                     timeout=self.busy_timeout_ms / 1000,
-                    check_same_thread=False,
+                    # Thread-local pool guarantees each connection is only accessed
+                    # from the thread that created it; check_same_thread=True lets
+                    # SQLite enforce this as a safety net.
+                    check_same_thread=True,
                     isolation_level=None,  # Manual transaction control
                 )
                 conn.row_factory = sqlite3.Row
@@ -202,14 +205,43 @@ def atomic_transaction(
             conn.execute("BEGIN IMMEDIATE")
             try:
                 yield conn
-                conn.execute("COMMIT")
-                return
             except Exception:
                 try:
                     conn.execute("ROLLBACK")
                 except sqlite3.Error:
                     pass
                 raise
+            # COMMIT is outside the inner try so contention here reaches the
+            # outer retry loop rather than being silently swallowed.
+            # Apply a short retry loop specifically for COMMIT contention.
+            commit_attempts = 0
+            commit_delay = base_delay
+            while True:
+                try:
+                    conn.execute("COMMIT")
+                    return
+                except sqlite3.OperationalError as commit_exc:
+                    ce_lower = str(commit_exc).lower()
+                    if not any(w in ce_lower for w in ("busy", "locked")):
+                        try:
+                            conn.execute("ROLLBACK")
+                        except sqlite3.Error:
+                            pass
+                        raise
+                    if commit_attempts >= max_retries:
+                        try:
+                            conn.execute("ROLLBACK")
+                        except sqlite3.Error:
+                            pass
+                        raise TransactionError(
+                            f"COMMIT failed after {commit_attempts + 1} attempt(s): {commit_exc}"
+                        ) from commit_exc
+                    commit_attempts += 1
+                    actual = min(commit_delay, MAX_RETRY_DELAY)
+                    logger.warning("COMMIT contention (attempt %d/%d), retrying in %.2fs",
+                                   commit_attempts, max_retries, actual)
+                    time.sleep(actual)
+                    commit_delay *= 2
 
         except sqlite3.OperationalError as exc:
             err_lower = str(exc).lower()
@@ -250,22 +282,18 @@ class InputSanitizer:
     Always prefer parameterized queries; use this as an additional defense layer.
     """
 
-    _SQL_KEYWORDS = frozenset(
-        [
-            "drop",
-            "delete",
-            "truncate",
-            "insert",
-            "update",
-            "alter",
-            "create",
-            "exec",
-            "execute",
-            "union",
-            "select",
-            "--",
-            ";",
-        ]
+    # Alphabetic SQL keywords use word-boundary matching to avoid false positives
+    # on legitimate values like "dropbox", "selection", "truncate_me".
+    # Punctuation tokens (-- ; ) are matched as exact substrings.
+    _SQL_KEYWORDS_WORD = frozenset(
+        ["drop", "delete", "truncate", "insert", "update",
+         "alter", "create", "exec", "execute", "union", "select"]
+    )
+    _SQL_TOKENS_EXACT = frozenset(["--", ";"])
+    _SQL_KEYWORD_RE = re.compile(
+        r"(?:" + "|".join(re.escape(k) for k in
+            ["drop", "delete", "truncate", "insert", "update",
+             "alter", "create", "exec", "execute", "union", "select"]) + r")"
     )
     _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -282,9 +310,13 @@ class InputSanitizer:
         """
         Returns True if value contains SQL injection patterns.
         NOTE: Heuristic only — always use parameterized queries.
+        Uses word-boundary matching for alphabetic keywords to avoid false
+        positives on values like "dropbox", "selection", "truncate_me".
         """
         lower = value.lower()
-        return any(kw in lower for kw in InputSanitizer._SQL_KEYWORDS)
+        return bool(InputSanitizer._SQL_KEYWORD_RE.search(lower)) or any(
+            tok in lower for tok in InputSanitizer._SQL_TOKENS_EXACT
+        )
 
     @staticmethod
     def safe_identifier(name: str) -> str:
@@ -355,7 +387,13 @@ class DatabaseHealthMonitor:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
-        logger.info("DB health monitor stopped")
+            if self._thread.is_alive():
+                logger.warning(
+                    "DB health monitor thread did not stop within 5s — "
+                    "it may still be running"
+                )
+            else:
+                logger.info("DB health monitor stopped")
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
