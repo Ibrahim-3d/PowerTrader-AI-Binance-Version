@@ -7504,9 +7504,7 @@ Platform: {sys.platform}
                     except RuntimeError:
                         raise  # surface vault-broken error to caller
                     except Exception as exc:
-                        _logger.warning(
-                            "Encrypted vault read failed: %s", exc
-                        )
+                        _logger.warning("Encrypted vault read failed: %s", exc)
                         raise RuntimeError(
                             f"Credential vault is present but unreadable: {exc}"
                         ) from exc
@@ -8131,9 +8129,9 @@ Platform: {sys.platform}
                     if len(raw) == 64:
                         raw = raw[:32]
                         priv_b64 = base64.b64encode(raw).decode("utf-8")
-                        private_b64_state[
-                            "value"
-                        ] = priv_b64  # keep UI state consistent
+                        private_b64_state["value"] = (
+                            priv_b64  # keep UI state consistent
+                        )
                     elif len(raw) != 32:
                         messagebox.showerror(
                             "Bad private key",
@@ -8195,10 +8193,7 @@ Platform: {sys.platform}
                 except Exception as e:
                     messagebox.showerror(
                         "Save failed",
-                        f"Couldn't save credentials.
-
-Error:
-{e}",
+                        f"Couldn't save credentials.\n\nError:\n{e}",
                     )
                     return
 
@@ -8210,7 +8205,7 @@ Error:
                     try:
                         size = os.path.getsize(stale_path)
                         with open(stale_path, "r+b") as sf:
-                            sf.write(b" " * size)
+                            sf.write(b"\x00" * size)
                             sf.flush()
                             os.fsync(sf.fileno())
                     except OSError:
@@ -8220,7 +8215,8 @@ Error:
                     except OSError as rm_exc:
                         _hub_logger.warning(
                             "Could not remove stale plaintext credential %s: %s",
-                            stale_path, rm_exc,
+                            stale_path,
+                            rm_exc,
                         )
 
                 _refresh_api_status()
@@ -8481,7 +8477,9 @@ Error:
                 self.settings["auto_best_price"] = bool(auto_best_price_var.get())
 
                 self.settings["script_neural_runner2"] = neural_script_var.get().strip()
-                self.settings["script_neural_trainer"] = trainer_script_var.get().strip()
+                self.settings["script_neural_trainer"] = (
+                    trainer_script_var.get().strip()
+                )
                 self.settings["script_trader"] = trader_script_var.get().strip()
 
                 self.settings["ui_refresh_seconds"] = float(
