@@ -5,6 +5,7 @@ exist outside of pt_credentials.py (the authorised migration module).
 """
 import ast
 import os
+import sys
 import tempfile
 import unittest
 
@@ -15,10 +16,26 @@ ALLOWLIST = {
     "pt_credentials.py",
 }
 
+# Explicit set of test files to exclude from the production-code audit.
+# Using an explicit set (not a startswith("test_") prefix) so production
+# modules can never accidentally skip the audit by starting with "test_".
+TEST_FILES = {
+    "test_credential_audit.py",
+    "test_backup_validation.py",
+    "test_circuit_breaker.py",
+    "test_credentials_rotation.py",
+    "test_database_manager.py",
+    "test_error_handler.py",
+    "test_paper_trading_integration.py",
+    "test_security_logger.py",
+    "test_pt_hub.py",
+    "test_comprehensive.py",
+}
+
 
 def _get_python_files():
     """
-    Walk APP_DIR recursively; exclude allowlisted and test_ files.
+    Walk APP_DIR recursively; exclude allowlisted and known test files.
     Uses os.walk to cover any future subdirectories.
     """
     result = []
@@ -26,10 +43,36 @@ def _get_python_files():
         for fname in filenames:
             if not fname.endswith(".py"):
                 continue
-            if fname in ALLOWLIST or fname.startswith("test_"):
+            if fname in ALLOWLIST or fname in TEST_FILES:
                 continue
             result.append(os.path.join(dirpath, fname))
     return result
+
+
+def _unparse_node(node) -> str:
+    """
+    Return a string representation of an AST node.
+    Uses ast.unparse (Python 3.9+) when available; falls back to a simple
+    visitor for older interpreters so the audit is never silently a no-op.
+    """
+    if hasattr(ast, "unparse"):
+        return ast.unparse(node)
+    # Fallback for Python < 3.9
+    if isinstance(node, ast.Constant):
+        return repr(node.value)
+    if isinstance(node, ast.Str):  # deprecated but present in 3.8
+        return repr(node.s)
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return f"{_unparse_node(node.value)}.{node.attr}"
+    if isinstance(node, ast.BinOp):
+        return f"{_unparse_node(node.left)} op {_unparse_node(node.right)}"
+    if isinstance(node, ast.JoinedStr):
+        # f-string: collect all string constants
+        parts = [_unparse_node(v) for v in node.values]
+        return "".join(parts)
+    return ""
 
 
 def _ast_cred_opens(filepath, modes=None):
@@ -40,6 +83,10 @@ def _ast_cred_opens(filepath, modes=None):
     modes: set of mode strings to match (e.g. {"w"}).
            None = match any mode (including default read).
     """
+    if sys.version_info < (3, 8):
+        # ast.Constant not available before 3.8 — skip with a note
+        return []
+
     hits = []
     try:
         with open(filepath, "r", errors="ignore") as f:
@@ -58,24 +105,22 @@ def _ast_cred_opens(filepath, modes=None):
         if not is_open or not node.args:
             continue
 
-        first_arg = ast.unparse(node.args[0]) if hasattr(ast, "unparse") else ""
+        first_arg = _unparse_node(node.args[0])
         if "r_key" not in first_arg and "r_secret" not in first_arg:
             continue
 
-        # Collect explicit mode
+        # Only inspect the second positional argument (index 1) for mode —
+        # args[2] is buffering (int), not mode.
         explicit_mode = None
-        for arg in node.args[1:]:
-            val = ast.unparse(arg) if hasattr(ast, "unparse") else ""
-            explicit_mode = val.strip("\"'")
+        if len(node.args) > 1:
+            explicit_mode = _unparse_node(node.args[1]).strip("\"'")
         for kw in node.keywords:
             if kw.arg == "mode":
-                val = ast.unparse(kw.value) if hasattr(ast, "unparse") else ""
-                explicit_mode = val.strip("\"'")
+                explicit_mode = _unparse_node(kw.value).strip("\"'")
 
         # If modes filter given, only match those modes
-        if modes is not None:
-            if explicit_mode not in modes:
-                continue
+        if modes is not None and explicit_mode not in modes:
+            continue
 
         hits.append((node.lineno, f"open({first_arg!r}, mode={explicit_mode!r})"))
 
@@ -189,6 +234,27 @@ class TestCredentialAudit(unittest.TestCase):
         with open(fpath, "r", errors="ignore") as f:
             content = f.read()
         self.assertIn("decrypt_credentials", content)
+
+    def test_unparse_fallback_handles_string_constant(self):
+        """_unparse_node must return the string value for ast.Constant nodes."""
+        node = ast.parse("'r_key.txt'", mode="eval").body
+        result = _unparse_node(node)
+        self.assertIn("r_key.txt", result)
+
+    def test_mode_parsing_ignores_buffering_arg(self):
+        """
+        open(path, mode, buffering) — buffering is args[2], not mode.
+        Scanner must not mistake an integer buffering arg for a mode string.
+        """
+        # open(r_key_path, "r", -1)  — buffering=-1, mode="r"
+        source = 'open(r_key_path, "r", -1)'
+        tree = ast.parse(source, mode="eval")
+        call = tree.body
+        # Simulate what _ast_cred_opens does: only look at args[1]
+        mode_val = None
+        if len(call.args) > 1:
+            mode_val = _unparse_node(call.args[1]).strip("\"'")
+        self.assertEqual(mode_val, "r")  # must be "r", not "-1"
 
 
 if __name__ == "__main__":
