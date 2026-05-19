@@ -2,10 +2,14 @@
 Tests for PaperTradingAccount wired into pt_integration.py - issue #86.
 Verifies account lifecycle, order placement, and account summary.
 """
+import asyncio
+import os
+import tempfile
 import unittest
 from decimal import Decimal
 
 from pt_paper_trading import (
+    MarketDataSimulator,
     OrderSide,
     OrderStatus,
     OrderType,
@@ -87,8 +91,6 @@ class TestPaperTradingIntegration(unittest.TestCase):
         self.assertIsNone(self.account.get_position("ETH"))
 
     def test_cancel_pending_limit_order(self):
-        from pt_paper_trading import MarketDataSimulator
-
         price = MarketDataSimulator().get_current_price("BTC") * Decimal("0.5")
         order_id = self.account.place_order(
             symbol="BTC",
@@ -102,14 +104,16 @@ class TestPaperTradingIntegration(unittest.TestCase):
         self.assertEqual(self.account.get_order_status(order_id), OrderStatus.CANCELLED)
 
     def test_oversized_order_rejected(self):
-        """Order exceeding risk limits (>10% of $10k portfolio) should be rejected."""
-        # Derive a quantity that always exceeds 10% of portfolio regardless of price
-        # 10% of $10,000 = $1,000 max; BTC is always > $1k, so 10 BTC always fails
-        from pt_paper_trading import MarketDataSimulator
+        """Order exceeding risk limits (>10% of $10k portfolio) should be rejected.
 
-        btc_price = float(MarketDataSimulator().get_current_price("BTC"))
-        # 5x the portfolio value worth of BTC - always rejected
-        excessive_qty = Decimal(str(round(50000.0 / btc_price, 4)))
+        Quantity is derived from the live simulator price so this test remains
+        valid regardless of what price MarketDataSimulator returns.  We request
+        5× the entire portfolio value worth of BTC — always above any reasonable
+        risk limit.
+        """
+        btc_price = MarketDataSimulator().get_current_price("BTC")
+        # 5x portfolio value in BTC, pure Decimal — no float round-trip
+        excessive_qty = (Decimal("50000") / btc_price).quantize(Decimal("0.0001"))
         order_id = self.account.place_order(
             symbol="BTC",
             order_type=OrderType.MARKET,
@@ -119,22 +123,23 @@ class TestPaperTradingIntegration(unittest.TestCase):
         self.assertEqual(self.account.get_order_status(order_id), OrderStatus.REJECTED)
 
     def test_integration_method_produces_pass_results(self):
-        """Verify the integration test method produces PASS results, not SKIP."""
-        import asyncio
+        """Verify _test_trading_simulation produces PASS results, not SKIP.
 
-        # Import integration tester
+        Uses a TemporaryDirectory for config_path so the test is hermetic and
+        creates no files in the working tree.
+        """
         try:
             from pt_integration import LiveIntegrationTester
+        except ImportError:
+            self.skipTest("LiveIntegrationTester not importable in this environment")
 
-            tester = LiveIntegrationTester()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = os.path.join(tmpdir, "integration_test.json")
+            tester = LiveIntegrationTester(config_path=config_path)
             asyncio.run(tester._test_trading_simulation())
             statuses = [r.status for r in tester.test_results]
-            # Should not have any SKIP results
             self.assertNotIn("SKIP", statuses)
-            # Should have at least one PASS
             self.assertIn("PASS", statuses)
-        except ImportError:
-            self.skipTest("IntegrationTester not importable in this environment")
 
 
 if __name__ == "__main__":

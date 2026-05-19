@@ -13,6 +13,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -33,7 +34,6 @@ from pt_paper_trading import (
     OrderType,
     PaperTradingAccount,
 )
-from decimal import Decimal  # noqa: E402
 
 
 @dataclass
@@ -553,21 +553,22 @@ class LiveIntegrationTester:
                 quantity=Decimal("0.001"),
             )
             status = account.get_order_status(order_id)
-            if status in (
-                OrderStatus.FILLED,
-                OrderStatus.PENDING,
-                OrderStatus.REJECTED,
-            ):
-                result_status = "PASS" if status == OrderStatus.FILLED else "FAIL"
+            if status == OrderStatus.FILLED:
                 self._add_result(
                     "Trading Simulation",
                     "Place Buy Order",
-                    result_status,
+                    "PASS",
                     (time.time() - t2) * 1000,
                     f"Market BUY 0.001 BTC: order_id={str(order_id)[:8]}, status={status.value}",
                 )
             else:
-                raise ValueError(f"Unexpected order status: {status}")
+                self._add_result(
+                    "Trading Simulation",
+                    "Place Buy Order",
+                    "FAIL",
+                    (time.time() - t2) * 1000,
+                    f"Market BUY 0.001 BTC: unexpected status={status.value} (expected FILLED)",
+                )
         except Exception as exc:
             self._add_result(
                 "Trading Simulation",
